@@ -345,6 +345,7 @@ void allocate_banks()
 
 void initialize_batch()
 {
+  // TO DO: load new random samples
   // Increment current batch
   ++simulation::current_batch;
   if (settings::run_mode == RunMode::FIXED_SOURCE) {
@@ -382,16 +383,37 @@ void initialize_batch()
     }
   }
 
+  if ((!first_active) & (simulation::current_batch > settings::n_inactive)){
+    // we set the number of generations per batch to 0 since each batch is a new random sample
+    settings::gen_per_batch = 0;
+    uint64_t seed = openmc_get_seed();
+    openmc_set_seed(seed + simulation::current_batch);
+  }
+
   // Add user tallies to active tallies list
   setup_active_tallies();
 }
 
 void finalize_batch()
 {
+  bool first_active = false;
+  if (!settings::restart_run) {
+    first_active = simulation::current_batch == settings::n_inactive + 1;
+  } else if (simulation::current_batch == simulation::restart_batch + 1) {
+    first_active = !(simulation::restart_batch < settings::n_inactive);
+  }
   // Reduce tallies onto master process and accumulate
-  simulation::time_tallies.start();
-  accumulate_tallies();
-  simulation::time_tallies.stop();
+  if ((first_active) & (simulation::current_batch > settings::n_inactive)){
+    // We accumulate normal tallies if we are in the first batch to compute the statistical uncertainty (sum and sum_sq)
+    simulation::time_tallies.start();
+    accumulate_tallies();
+    simulation::time_tallies.stop();
+  } else {
+    // We accumulate only the sum of contributions for each random sample to compute the total uncertainty
+    simulation::time_tallies.start();
+    accumulate_EMC_tallies();
+    simulation::time_tallies.stop();
+  }
 
   // update weight windows if needed
   for (const auto& wwg : variance_reduction::weight_windows_generators) {
@@ -545,6 +567,8 @@ void finalize_generation()
 
     // Collect results and statistics
     calculate_generation_keff();
+
+    // TO DO: modify this function when not first active batch (no sum_sq accumulated)
     calculate_average_keff();
 
     // Write generation output

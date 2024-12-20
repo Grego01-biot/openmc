@@ -80,6 +80,7 @@ bool weight_window_checkpoint_surface {false};
 bool weight_window_checkpoint_collision {true};
 bool write_all_tracks {false};
 bool write_initial_source {false};
+bool EMC {false};
 
 std::string path_cross_sections;
 std::string path_input;
@@ -194,6 +195,11 @@ void get_run_parameters(pugi::xml_node node_base)
       std::stoi(get_node_value(node_base, "max_write_lost_particles"));
   }
 
+   // Get EMC boolean
+  if (check_for_node(node_base, "EMC")) {
+    EMC = get_node_value_bool(node_base, "EMC");
+  }
+
   // Get number of inactive batches
   if (run_mode == RunMode::EIGENVALUE ||
       solver_type == SolverType::RANDOM_RAY) {
@@ -204,6 +210,7 @@ void get_run_parameters(pugi::xml_node node_base)
       gen_per_batch =
         std::stoi(get_node_value(node_base, "generations_per_batch"));
     }
+  
 
     // Preallocate space for keff and entropy by generation
     int m = settings::n_max_batches * settings::gen_per_batch;
@@ -487,6 +494,10 @@ void read_settings_xml(pugi::xml_node root)
       fatal_error("Number of max lost particles must be greater than zero.");
     } else if (rel_max_lost_particles <= 0.0 || rel_max_lost_particles >= 1.0) {
       fatal_error("Relative max lost particles must be between zero and one.");
+    } else if (EMC == true){
+      if (gen_per_batch == 1){
+        fatal_error("EMC mode needs more than one generation per batch for computing the statistical uncertainty");
+      }
     }
   }
 

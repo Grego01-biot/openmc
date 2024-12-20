@@ -781,6 +781,43 @@ void Tally::accumulate()
   }
 }
 
+void Tally::accumulate_EMC()
+{
+  // Increment number of realizations
+  n_realizations_ += settings::reduce_tallies ? 1 : mpi::n_procs;
+
+  if (mpi::master || !settings::reduce_tallies) {
+    // Calculate total source strength for normalization
+    double total_source = 0.0;
+    if (settings::run_mode == RunMode::FIXED_SOURCE &&
+        !settings::uniform_source_sampling) {
+      for (const auto& s : model::external_sources) {
+        total_source += s->strength();
+      }
+    } else {
+      total_source = 1.0;
+    }
+
+    // Account for number of source particles in normalization
+    double norm =
+      total_source / (settings::n_particles);
+
+    if (settings::solver_type == SolverType::RANDOM_RAY) {
+      norm = 1.0;
+    }
+
+// Accumulate each result
+#pragma omp parallel for
+    for (int i = 0; i < results_.shape()[0]; ++i) {
+      for (int j = 0; j < results_.shape()[1]; ++j) {
+        double val = results_(i, j, TallyResult::VALUE) * norm;
+        results_(i, j, TallyResult::VALUE) = 0.0;
+        results_(i, j, TallyResult::SUM) += val;
+      }
+    }
+  }
+}
+
 int Tally::score_index(const std::string& score) const
 {
   for (int i = 0; i < scores_.size(); i++) {
@@ -1004,6 +1041,53 @@ void accumulate_tallies()
   for (int i_tally : model::active_tallies) {
     auto& tally {model::tallies[i_tally]};
     tally->accumulate();
+  }
+}
+
+void accumulate_EMC_tallies()
+{
+#ifdef OPENMC_MPI
+  // Combine tally results onto master process
+  if (mpi::n_procs > 1 && settings::solver_type == SolverType::MONTE_CARLO) {
+    reduce_tally_results();
+  }
+#endif
+
+  // Increase number of realizations (only used for global tallies)
+  simulation::n_realizations += 1;
+
+  // Accumulate on master only unless run is not reduced then do it on all
+  if (mpi::master || !settings::reduce_tallies) {
+    auto& gt = simulation::global_tallies;
+
+    if (settings::run_mode == RunMode::EIGENVALUE) {
+      if (simulation::current_batch > settings::n_inactive) {
+        // Accumulate products of different estimators of k
+        double k_col = gt(GlobalTally::K_COLLISION, TallyResult::VALUE) /
+                       simulation::total_weight;
+        double k_abs = gt(GlobalTally::K_ABSORPTION, TallyResult::VALUE) /
+                       simulation::total_weight;
+        double k_tra = gt(GlobalTally::K_TRACKLENGTH, TallyResult::VALUE) /
+                       simulation::total_weight;
+        simulation::k_col_abs += k_col * k_abs;
+        simulation::k_col_tra += k_col * k_tra;
+        simulation::k_abs_tra += k_abs * k_tra;
+      }
+    }
+
+    // Accumulate results for global tallies
+    for (int i = 0; i < N_GLOBAL_TALLIES; ++i) {
+      double val = gt(i, TallyResult::VALUE) / simulation::total_weight;
+      gt(i, TallyResult::VALUE) = 0.0;
+      gt(i, TallyResult::SUM) += val;
+      gt(i, TallyResult::SUM_SQ) += val * val; // TO DELETE WHEN EIGENVALUE.CPP READY
+    }
+  }
+
+  // Accumulate results for each tally
+  for (int i_tally : model::active_tallies) {
+    auto& tally {model::tallies[i_tally]};
+    tally->accumulate_EMC();
   }
 }
 

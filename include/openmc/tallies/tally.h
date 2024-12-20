@@ -119,6 +119,7 @@ public:
 
   void accumulate();
 
+  void accumulate_EMC();
   //! return the index of a score specified by name
   int score_index(const std::string& score) const;
 
@@ -240,6 +241,10 @@ void read_tallies_xml(pugi::xml_node root);
 //! \brief Accumulate the sum of the contributions from each history within the
 //! batch to a new random variable
 void accumulate_tallies();
+
+//! \brief Accumulate the sum of the contributions from each history within the
+//! batch to a new random variable
+void accumulate_EMC_tallies();
 
 //! Determine which tallies should be active
 void setup_active_tallies();
