@@ -338,8 +338,16 @@ void calculate_average_keff()
   int i = overall_generation() - 1;
   int n;
   if (simulation::current_batch > settings::n_inactive) {
-    n = settings::gen_per_batch * simulation::n_realizations +
-        simulation::current_gen;
+    if (settings::gen_per_batch == 5) {
+      n = (settings::gen_per_batch) * (simulation::n_realizations + 1) +
+          simulation::current_gen;
+    } else {
+      n = settings::gen_per_batch * simulation::n_realizations +
+          simulation::current_gen;
+    }
+    /*fmt::print("Generations per batch: {}\n", n);
+    fmt::print("Number of realizations: {}\n", simulation::n_realizations);
+    fmt::print("Current generation: {}\n", simulation::current_gen);*/
   } else {
     n = 0;
   }
@@ -354,7 +362,7 @@ void calculate_average_keff()
     simulation::k_sum[1] += std::pow(simulation::k_generation[i], 2);
 
     // Determine mean
-    simulation::keff = simulation::k_sum[0] / n;
+    simulation::keff = simulation::k_sum[0] / n ;  
 
     if (n > 1) {
       double t_value;
@@ -366,11 +374,16 @@ void calculate_average_keff()
         t_value = 1.0;
       }
 
-      // Standard deviation of the sample mean of k
+      // Standard deviation of the sample mean of k using batch statistics
       simulation::keff_std =
         t_value *
         std::sqrt(
           (simulation::k_sum[1] / n - std::pow(simulation::keff, 2)) / (n - 1));
+
+      if (settings::EMC)
+      {
+        simulation::keff_stat_uncertainty += simulation::keff_std / n;
+      }
     }
   }
 }
@@ -389,6 +402,12 @@ int openmc_get_keff(double* k_combined)
     if (simulation::n_realizations <= 1) {
       k_combined[1] = std::numeric_limits<double>::infinity();
     }
+    return 0;
+  }
+
+  if (simulation::n_realizations == 1 || settings::EMC == true) {
+    k_combined[0] = simulation::keff;
+    k_combined[1] = simulation::keff_std;
     return 0;
   }
 

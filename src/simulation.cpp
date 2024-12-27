@@ -301,6 +301,7 @@ int current_gen;
 bool initialized {false};
 double keff {1.0};
 double keff_std;
+double keff_stat_uncertainty;
 double k_col_abs {0.0};
 double k_col_tra {0.0};
 double k_abs_tra {0.0};
@@ -382,37 +383,48 @@ void initialize_batch()
       t->active_ = true;
     }
   }
-
-  if ((!first_active) & (simulation::current_batch > settings::n_inactive)){
-    // we set the number of generations per batch to 0 since each batch is a new random sample
-    settings::gen_per_batch = 0;
-    uint64_t seed = openmc_get_seed();
-    openmc_set_seed(seed + simulation::current_batch);
-  }
-
+  // if EMC mode is activated
+  /*if (settings::EMC){ 
+    if ((!first_active) && (simulation::current_batch > settings::n_inactive)){
+      // we set the number of generations per batch to 1 since each batch is a new random sample
+      settings::gen_per_batch = 5;
+      uint64_t seed = openmc_get_seed();
+      openmc_set_seed(seed + simulation::current_batch);
+    }
+  }*/
   // Add user tallies to active tallies list
   setup_active_tallies();
 }
 
 void finalize_batch()
 {
-  bool first_active = false;
-  if (!settings::restart_run) {
-    first_active = simulation::current_batch == settings::n_inactive + 1;
-  } else if (simulation::current_batch == simulation::restart_batch + 1) {
-    first_active = !(simulation::restart_batch < settings::n_inactive);
-  }
-  // Reduce tallies onto master process and accumulate
-  if ((first_active) & (simulation::current_batch > settings::n_inactive)){
-    // We accumulate normal tallies if we are in the first batch to compute the statistical uncertainty (sum and sum_sq)
+  if (!settings::EMC){
     simulation::time_tallies.start();
     accumulate_tallies();
     simulation::time_tallies.stop();
   } else {
-    // We accumulate only the sum of contributions for each random sample to compute the total uncertainty
-    simulation::time_tallies.start();
-    accumulate_EMC_tallies();
-    simulation::time_tallies.stop();
+    bool first_active = false;
+    if (!settings::restart_run) {
+      first_active = simulation::current_batch == settings::n_inactive + 1;
+    } else if (simulation::current_batch == simulation::restart_batch + 1) {
+      first_active = !(simulation::restart_batch < settings::n_inactive);
+    }
+    // Reduce tallies onto master process and accumulate
+    if ((first_active) && (simulation::current_batch > settings::n_inactive)){
+      // We accumulate normal tallies if we are in the first batch to compute the statistical uncertainty (sum and sum_sq)
+      simulation::time_tallies.start();
+      accumulate_tallies();
+      compute_statistical_uncertainty();
+      simulation::time_tallies.stop();
+
+      // Update gen_per_batch after the first active batch
+      settings::gen_per_batch = 5;
+    } else {
+      // We accumulate only the sum of contributions for each random sample to compute the total uncertainty
+      simulation::time_tallies.start();
+      accumulate_EMC_tallies();
+      simulation::time_tallies.stop();
+    }
   }
 
   // update weight windows if needed

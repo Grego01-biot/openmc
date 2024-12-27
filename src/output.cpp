@@ -516,8 +516,19 @@ std::pair<double, double> mean_stdev(const double* x, int n)
   return {mean, stdev};
 }
 
-//==============================================================================
+std::pair<double, double> EMC_uncertainty(const double* x, int n)
+{
+  double mean = x[static_cast<int>(TallyResult::SUM)] / n;
+  double var_tot = 
+    n > 1 ? (1/n-1) * (x[static_cast<int>(TallyResult::SUM)] - mean )
+          : 0.0;
+  double var_stat = x[static_cast<int>(TallyResult::VAR)];
+  double var_nuclear_data = var_tot - var_stat;
+  return {mean, var_nuclear_data};
+}
 
+//==============================================================================
+// to modify for EMC!!
 void print_results()
 {
   // display header block for results
@@ -540,6 +551,7 @@ void print_results()
   // write global tallies
   const auto& gt = simulation::global_tallies;
   double mean, stdev;
+  
   if (n > 1) {
     if (settings::run_mode == RunMode::EIGENVALUE) {
       std::tie(mean, stdev) = mean_stdev(&gt(GlobalTally::K_COLLISION, 0), n);
@@ -562,9 +574,10 @@ void print_results()
     fmt::print(
       " Leakage Fraction            = {:.5f} +/- {:.5f}\n", mean, t_n1 * stdev);
   } else {
-    if (mpi::master)
+    if (mpi::master || !settings::EMC) {
       warning("Could not compute uncertainties -- only one "
               "active batch simulated!");
+    }
 
     if (settings::run_mode == RunMode::EIGENVALUE) {
       fmt::print(" k-effective (Collision)    = {:.5f}\n",
@@ -710,12 +723,22 @@ void write_tallies()
           std::string score_name =
             score > 0 ? reaction_name(score) : score_names.at(score);
           double mean, stdev;
+          if (settings::EMC)
+          {
+            std::tie(mean, stdev) =
+            EMC_uncertainty(&tally.results_(filter_index, score_index, 0),
+              tally.n_realizations_);
+            fmt::print(tallies_out, "{0:{1}}{2:<36} {3:.6} +/- {4:.6}\n", "",
+            indent + 1, score_name, mean, stdev);
+          score_index += 1;
+          } else{
           std::tie(mean, stdev) =
             mean_stdev(&tally.results_(filter_index, score_index, 0),
               tally.n_realizations_);
           fmt::print(tallies_out, "{0:{1}}{2:<36} {3:.6} +/- {4:.6}\n", "",
             indent + 1, score_name, mean, t_value * stdev);
           score_index += 1;
+          }
         }
         indent -= 2;
       }

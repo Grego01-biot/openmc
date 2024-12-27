@@ -63,7 +63,7 @@ vector<int> pulse_height_cells;
 } // namespace model
 
 namespace simulation {
-xt::xtensor_fixed<double, xt::xshape<N_GLOBAL_TALLIES, 3>> global_tallies;
+xt::xtensor_fixed<double, xt::xshape<N_GLOBAL_TALLIES, 4>> global_tallies; // change the size for EMC only - OPTIMIZE!!
 int32_t n_realizations {0};
 } // namespace simulation
 
@@ -732,7 +732,12 @@ void Tally::init_triggers(pugi::xml_node node)
 void Tally::init_results()
 {
   int n_scores = scores_.size() * nuclides_.size();
-  results_ = xt::empty<double>({n_filter_bins_, n_scores, 3});
+  if (settings::EMC)
+  {
+    results_ = xt::empty<double>({n_filter_bins_, n_scores, 4});
+  } else{
+    results_ = xt::empty<double>({n_filter_bins_, n_scores, 3});
+  }
 }
 
 void Tally::reset()
@@ -1080,14 +1085,15 @@ void accumulate_EMC_tallies()
       double val = gt(i, TallyResult::VALUE) / simulation::total_weight;
       gt(i, TallyResult::VALUE) = 0.0;
       gt(i, TallyResult::SUM) += val;
-      gt(i, TallyResult::SUM_SQ) += val * val; // TO DELETE WHEN EIGENVALUE.CPP READY
+      //gt(i, TallyResult::SUM_SQ) += val * val; // this SUM_SQ is used to compute std_dev 
+      // in print_results() in output.cpp
     }
   }
 
   // Accumulate results for each tally
   for (int i_tally : model::active_tallies) {
     auto& tally {model::tallies[i_tally]};
-    tally->accumulate_EMC();
+    tally->accumulate_EMC(); // different for tallies since we cannot use sum_sq
   }
 }
 
@@ -1135,6 +1141,44 @@ void setup_active_tallies()
       }
     }
   }
+}
+
+void compute_statistical_uncertainty()
+{
+  int n = settings::gen_per_batch * simulation::n_realizations +
+        simulation::current_gen;
+  // Compute statistical uncertainty for global tallies
+  auto& gt = simulation::global_tallies;
+  for (int i = 0; i < N_GLOBAL_TALLIES; ++i) {
+    double sum = gt(i, TallyResult::SUM);
+    double sum_sq = gt(i, TallyResult::SUM_SQ);
+    double mean = sum / n;
+    double variance = sum_sq / n - mean * mean;
+    gt(i, TallyResult::VAR) += variance;
+  }
+
+  // Compute statistical uncertainty for each tally
+  for (int i_tally : model::active_tallies) {
+    auto& tally {model::tallies[i_tally]};
+    for (int i = 0; i < tally->results_.shape()[1]; ++i) {
+      double sum = tally->results_(0, i, TallyResult::SUM);
+      double sum_sq = tally->results_(0, i, TallyResult::SUM_SQ);
+      double mean = sum / n;
+      double variance = sum_sq / n - mean * mean;
+      tally->results_(0, i, TallyResult::VAR) += variance;
+    }
+  }
+  /*
+  for (int i = 0; i < results_.shape()[0]; ++i) {
+    for (int j = 0; j < results_.shape()[1]; ++j) {
+      double sum = results_(i, j, TallyResult::SUM);
+      double sum_sq = results_(i, j, TallyResult::SUM_SQ);
+      double mean = sum / n;
+      double variance = sum_sq / n - mean * mean;
+      results_(i, j, TallyResult::VAR) += variance;
+    }
+  }
+  */
 }
 
 void free_memory_tally()

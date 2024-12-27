@@ -120,6 +120,7 @@ public:
   void accumulate();
 
   void accumulate_EMC();
+
   //! return the index of a score specified by name
   int score_index(const std::string& score) const;
 
@@ -215,7 +216,7 @@ extern vector<int> pulse_height_cells;
 
 namespace simulation {
 //! Global tallies (such as k-effective estimators)
-extern xt::xtensor_fixed<double, xt::xshape<N_GLOBAL_TALLIES, 3>>
+extern xt::xtensor_fixed<double, xt::xshape<N_GLOBAL_TALLIES, 4>>
   global_tallies;
 
 //! Number of realizations for global tallies
@@ -248,6 +249,9 @@ void accumulate_EMC_tallies();
 
 //! Determine which tallies should be active
 void setup_active_tallies();
+
+//! Compute the statistical uncertainty for all tallies using the first batch
+void compute_statistical_uncertainty();
 
 // Alias for the type returned by xt::adapt(...). N is the dimension of the
 // multidimensional array
