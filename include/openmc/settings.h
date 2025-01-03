@@ -100,6 +100,7 @@ extern "C" int32_t
   max_write_lost_particles;       //!< maximum number of lost particles
                                   //!< to be written to files
 extern "C" int32_t gen_per_batch; //!< number of generations per batch
+extern "C" int32_t new_gen_per_batch; //!< new number of generations per batch
 extern "C" int64_t n_particles;   //!< number of particles per generation
 
 extern int64_t

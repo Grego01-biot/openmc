@@ -96,6 +96,7 @@ int32_t max_lost_particles {10};
 double rel_max_lost_particles {1.0e-6};
 int32_t max_write_lost_particles {-1};
 int32_t gen_per_batch {1};
+int32_t new_gen_per_batch {1};
 int64_t n_particles {-1};
 
 int64_t max_particles_in_flight {100000};

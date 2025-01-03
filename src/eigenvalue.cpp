@@ -338,21 +338,18 @@ void calculate_average_keff()
   int i = overall_generation() - 1;
   int n;
   if (simulation::current_batch > settings::n_inactive) {
-    if (settings::gen_per_batch == 5) {
-      n = (settings::gen_per_batch) * (simulation::n_realizations + 1) +
+    if (settings::new_gen_per_batch > settings::gen_per_batch) {
+      n = (settings::gen_per_batch * simulation::n_realizations) + (settings::new_gen_per_batch - settings::gen_per_batch) +
           simulation::current_gen;
     } else {
-      n = settings::gen_per_batch * simulation::n_realizations +
+      n = settings::new_gen_per_batch * simulation::n_realizations +
           simulation::current_gen;
     }
-    /*fmt::print("Generations per batch: {}\n", n);
-    fmt::print("Number of realizations: {}\n", simulation::n_realizations);
-    fmt::print("Current generation: {}\n", simulation::current_gen);*/
   } else {
     n = 0;
   }
 
-  if (n <= 0) {
+  if (n <= 0 || settings::new_gen_per_batch > settings::gen_per_batch) {
     // For inactive generations, use current generation k as estimate for next
     // generation
     simulation::keff = simulation::k_generation[i];
@@ -363,7 +360,7 @@ void calculate_average_keff()
 
     // Determine mean
     simulation::keff = simulation::k_sum[0] / n ;  
-
+    
     if (n > 1) {
       double t_value;
       if (settings::confidence_intervals) {
@@ -379,11 +376,6 @@ void calculate_average_keff()
         t_value *
         std::sqrt(
           (simulation::k_sum[1] / n - std::pow(simulation::keff, 2)) / (n - 1));
-
-      if (settings::EMC)
-      {
-        simulation::keff_stat_uncertainty += simulation::keff_std / n;
-      }
     }
   }
 }

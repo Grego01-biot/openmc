@@ -418,7 +418,9 @@ void finalize_batch()
       simulation::time_tallies.stop();
 
       // Update gen_per_batch after the first active batch
-      settings::gen_per_batch = 5;
+
+      settings::new_gen_per_batch = settings::gen_per_batch;
+      settings::gen_per_batch = 1;
     } else {
       // We accumulate only the sum of contributions for each random sample to compute the total uncertainty
       simulation::time_tallies.start();
