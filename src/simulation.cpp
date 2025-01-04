@@ -301,7 +301,7 @@ int current_gen;
 bool initialized {false};
 double keff {1.0};
 double keff_std;
-double keff_stat_uncertainty;
+double keff_first_batch {1.0};
 double k_col_abs {0.0};
 double k_col_tra {0.0};
 double k_abs_tra {0.0};

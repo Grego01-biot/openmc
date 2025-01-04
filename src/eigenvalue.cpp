@@ -352,7 +352,9 @@ void calculate_average_keff()
   if (n <= 0 || settings::new_gen_per_batch > settings::gen_per_batch) {
     // For inactive generations, use current generation k as estimate for next
     // generation
+
     simulation::keff = simulation::k_generation[i];
+    //fmt::print(" i= {}\n", i);
   } else {
     // Sample mean of keff
     simulation::k_sum[0] += simulation::k_generation[i];
@@ -360,6 +362,7 @@ void calculate_average_keff()
 
     // Determine mean
     simulation::keff = simulation::k_sum[0] / n ;  
+    //fmt::print(" i= {}\n", i);
     
     if (n > 1) {
       double t_value;

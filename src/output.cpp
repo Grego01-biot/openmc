@@ -408,6 +408,9 @@ void print_generation()
 
   if (n > 1) {
     fmt::print("   {:8.5f} +/-{:8.5f}", simulation::keff, simulation::keff_std);
+    if (settings::EMC && simulation::current_batch == (settings::n_batches - settings::n_inactive + 1)) {
+      simulation::keff_first_batch = simulation::keff;
+    }
   }
   fmt::print("\n");
   std::fflush(stdout);
@@ -527,6 +530,24 @@ std::pair<double, double> EMC_uncertainty(const double* x, int n)
   return {mean, var_nuclear_data};
 }
 
+double EMC_keff_uncertainty()
+{
+  int n_active_batches = settings::n_batches - settings::n_inactive;
+  if (n_active_batches <= 1) return 0.0;
+
+  // Compute the mean of keff values for active batches
+  double mean_keff = simulation::keff_first_batch/n_active_batches;
+  for (int i = n_active_batches + 1 ; i < 2*n_active_batches; ++i) {
+    mean_keff += simulation::k_generation[i]/n_active_batches;
+  }
+  // Compute the variance
+  double variance = (1.0/(n_active_batches - 1)) * (simulation::keff_first_batch - mean_keff) * (simulation::keff_first_batch - mean_keff);
+  for (int i = n_active_batches + 1 ; i < 2*n_active_batches; ++i) {
+    variance += (1.0/(n_active_batches - 1))*( (simulation::k_generation[i] - mean_keff) * (simulation::k_generation[i] - mean_keff) );
+  }
+  return variance;
+}
+
 //==============================================================================
 // to modify for EMC!!
 void print_results()
@@ -554,20 +575,53 @@ void print_results()
   
   if (n > 1) {
     if (settings::run_mode == RunMode::EIGENVALUE) {
-      std::tie(mean, stdev) = mean_stdev(&gt(GlobalTally::K_COLLISION, 0), n);
-      fmt::print(" k-effective (Collision)     = {:.5f} +/- {:.5f}\n", mean,
-        t_n1 * stdev);
-      std::tie(mean, stdev) = mean_stdev(&gt(GlobalTally::K_TRACKLENGTH, 0), n);
-      fmt::print(" k-effective (Track-length)  = {:.5f} +/- {:.5f}\n", mean,
-        t_n1 * stdev);
-      std::tie(mean, stdev) = mean_stdev(&gt(GlobalTally::K_ABSORPTION, 0), n);
-      fmt::print(" k-effective (Absorption)    = {:.5f} +/- {:.5f}\n", mean,
-        t_n1 * stdev);
-      if (n > 3) {
-        double k_combined[2];
-        openmc_get_keff(k_combined);
-        fmt::print(" Combined k-effective        = {:.5f} +/- {:.5f}\n",
-          k_combined[0], k_combined[1]);
+
+      if (settings::EMC){
+        std::tie(mean, stdev) = mean_stdev(&gt(GlobalTally::K_COLLISION, 0), n);
+        fmt::print(" k-effective (Collision)     = {:.5f} +/- {:.5f}\n", mean,
+          t_n1 * stdev);
+        std::tie(mean, stdev) = mean_stdev(&gt(GlobalTally::K_TRACKLENGTH, 0), n);
+        fmt::print(" k-effective (Track-length)  = {:.5f} +/- {:.5f}\n", mean,
+          t_n1 * stdev);
+        std::tie(mean, stdev) = mean_stdev(&gt(GlobalTally::K_ABSORPTION, 0), n);
+        fmt::print(" k-effective (Absorption)    = {:.5f} +/- {:.5f}\n", mean,
+          t_n1 * stdev);
+        if (n > 3) {
+          double k_combined[2];
+          openmc_get_keff(k_combined);
+          fmt::print(" Combined k-effective        = {:.5f} +/- {:.5f}\n",
+            k_combined[0], k_combined[1]);
+          header("EMC", 4);
+          fmt::print(" Statistical uncertainty     = {:.5f}\n",
+            simulation::keff_std);
+          double total_uncertainty = EMC_keff_uncertainty();
+          fmt::print(" Total uncertainty           = {:.5f}\n",
+            total_uncertainty);
+          if (total_uncertainty > simulation::keff_std) {
+            fmt::print(" Nuclear data uncertainty    = {:.5f}\n",
+              total_uncertainty - simulation::keff_std);
+          } else {
+            warning("The statistical uncertainty is larger than the total uncertainty." 
+                    "Need to simulate more particles to reduce the statistical uncertainty.");
+          }
+        }
+      } else {
+
+        std::tie(mean, stdev) = mean_stdev(&gt(GlobalTally::K_COLLISION, 0), n);
+        fmt::print(" k-effective (Collision)     = {:.5f} +/- {:.5f}\n", mean,
+          t_n1 * stdev);
+        std::tie(mean, stdev) = mean_stdev(&gt(GlobalTally::K_TRACKLENGTH, 0), n);
+        fmt::print(" k-effective (Track-length)  = {:.5f} +/- {:.5f}\n", mean,
+          t_n1 * stdev);
+        std::tie(mean, stdev) = mean_stdev(&gt(GlobalTally::K_ABSORPTION, 0), n);
+        fmt::print(" k-effective (Absorption)    = {:.5f} +/- {:.5f}\n", mean,
+          t_n1 * stdev);
+        if (n > 3) {
+          double k_combined[2];
+          openmc_get_keff(k_combined);
+          fmt::print(" Combined k-effective        = {:.5f} +/- {:.5f}\n",
+            k_combined[0], k_combined[1]);
+        }
       }
     }
     std::tie(mean, stdev) = mean_stdev(&gt(GlobalTally::LEAKAGE, 0), n);
