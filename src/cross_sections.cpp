@@ -12,6 +12,7 @@
 #include "openmc/mgxs_interface.h"
 #include "openmc/nuclide.h"
 #include "openmc/photon.h"
+#include "openmc/random_lcg.h"
 #include "openmc/settings.h"
 #include "openmc/simulation.h"
 #include "openmc/string_utils.h"
@@ -24,6 +25,7 @@
 
 #include <cstdlib> // for getenv
 #include <unordered_set>
+#include <fmt/core.h>
 
 namespace openmc {
 
@@ -351,6 +353,100 @@ void finalize_cross_sections()
       mark_fissionable_mgxs_materials();
     }
     simulation::time_read_xs.stop();
+  }
+}
+
+// Friend function definition
+void access_xs_types(const Nuclide& nuc, int& XS_TOTAL, int& XS_ABSORPTION, int& XS_FISSION, int& XS_NU_FISSION, int& XS_PHOTON_PROD) {
+  XS_TOTAL = Nuclide::XS_TOTAL;
+  XS_ABSORPTION = Nuclide::XS_ABSORPTION;
+  XS_FISSION = Nuclide::XS_FISSION;
+  XS_NU_FISSION = Nuclide::XS_NU_FISSION;
+  XS_PHOTON_PROD = Nuclide::XS_PHOTON_PROD;
+}
+
+
+void randomly_sample_cross_sections()
+{
+  // Modify continuous-energy cross sections
+  for (auto& mat : model::materials) {
+  // Loop over each nuclide in the material
+    for (int i_nuc : mat->nuclide_) {
+      // Access the corresponding Nuclide object
+      auto& nuc = data::nuclides[i_nuc];
+
+      std::string nuclide_name = nuc->name_;
+
+      // Access cross section type constants
+      int XS_TOTAL, XS_ABSORPTION, XS_FISSION, XS_NU_FISSION, XS_PHOTON_PROD;
+      access_xs_types(*nuc, XS_TOTAL, XS_ABSORPTION, XS_FISSION, XS_NU_FISSION, XS_PHOTON_PROD);
+      
+      /*fmt::print("Contents of random sample XS:\n");
+      for (const auto& entry : settings::random_sample_xs) {
+        fmt::print("Nuclide: {}\n", entry.first);
+        fmt::print("Cross sections: ");
+        for (const auto& xs_type : entry.second) {
+          fmt::print("{} ", xs_type);
+        }
+        fmt::print("\n");
+      }*/
+      // Check if this nuclide is specified for random sampling
+      if (settings::random_sample_xs.find(nuclide_name) != settings::random_sample_xs.end()) {
+
+        //fmt::print("Modifying cross sections for nuclide: {}\n", nuclide_name);
+        const auto& xs_types = settings::random_sample_xs[nuclide_name];
+
+        // Generate a new seed based on the current batch number
+        uint64_t seed = init_seed(simulation::current_batch, i_nuc);
+
+        // Randomly sample the specified cross sections
+        for (const auto& xs_type : xs_types) {
+  
+          if (xs_type == "total") {
+            //int count = 0;
+            // loop for different temperatures
+            for (auto& xs : nuc->xs_) {
+              // loop for different cross section values
+              for (auto& value : xs)
+              {
+                value *= 1.0 + (prn(&seed) - 0.5) * 0.2; // Example perturbation
+                //count++;
+              }
+            }
+            //fmt::print("Number of elements in total cross section: {}\n", count);
+          } 
+          /*else if (xs_type == "fission") {
+            int count = 0;
+            for (auto& value : nuc->xs_[XS_FISSION]) {
+              value *= 1.0 + (prn(&seed) - 0.5) * 0.1; // Example perturbation
+              count++;
+            }
+            fmt::print("Number of elements in fission cross section: {}\n", count);
+          } else if (xs_type == "absorption") {
+            int count = 0;
+            for (auto& value : nuc->xs_[XS_ABSORPTION]) {
+              value *= 1.0 + (prn(&seed) - 0.5) * 0.1; // Example perturbation
+              count++;
+            }
+            fmt::print("Number of elements in absorption cross section: {}\n", count);
+          } else if (xs_type == "nu-fission") {
+            int count = 0;
+            for (auto& value : nuc->xs_[XS_NU_FISSION]) {
+              value *= 1.0 + (prn(&seed) - 0.5) * 0.1; // Example perturbation
+              count++;
+            }
+            fmt::print("Number of elements in nu-fission cross section: {}\n", count);
+          } else if (xs_type == "photon-production") {
+            int count = 0;
+            for (auto& value : nuc->xs_[XS_PHOTON_PROD]) {
+              value *= 1.0 + (prn(&seed) - 0.5) * 0.1; // Example perturbation
+              count++;
+            }
+            fmt::print("Number of elements in photon-prod cross section: {}\n", count);
+          }*/
+        }
+      }
+    }
   }
 }
 

@@ -3,6 +3,7 @@
 #include "openmc/bank.h"
 #include "openmc/capi.h"
 #include "openmc/container_util.h"
+#include "openmc/cross_sections.h"
 #include "openmc/eigenvalue.h"
 #include "openmc/error.h"
 #include "openmc/event.h"
@@ -331,11 +332,20 @@ void allocate_banks()
 {
   if (settings::run_mode == RunMode::EIGENVALUE &&
       settings::solver_type == SolverType::MONTE_CARLO) {
+    
+    /*if (settings::EMC){
+      // Allocate source bank
+      simulation::source_bank.resize(settings::n_particles);
+
+      // Allocate fission bank
+      simulation::fission_bank.resize(3 * settings::n_particles);
+    } else {*/
     // Allocate source bank
     simulation::source_bank.resize(simulation::work_per_rank);
 
     // Allocate fission bank
     init_fission_bank(3 * simulation::work_per_rank);
+    
   }
 
   if (settings::surf_source_write) {
@@ -383,15 +393,12 @@ void initialize_batch()
       t->active_ = true;
     }
   }
-  // if EMC mode is activated
-  /*if (settings::EMC){ 
-    if ((!first_active) && (simulation::current_batch > settings::n_inactive)){
-      // we set the number of generations per batch to 1 since each batch is a new random sample
-      settings::gen_per_batch = 5;
-      uint64_t seed = openmc_get_seed();
-      openmc_set_seed(seed + simulation::current_batch);
-    }
-  }*/
+
+  if (settings::EMC && simulation::current_batch > (settings::n_inactive + 1) )
+  {
+    //fmt::print("New random sample for nu-fission for batch {}\n", simulation::current_batch);
+    randomly_sample_cross_sections();
+  }
   // Add user tallies to active tallies list
   setup_active_tallies();
 }
@@ -417,10 +424,15 @@ void finalize_batch()
       compute_statistical_uncertainty();
       simulation::time_tallies.stop();
 
-      // Update gen_per_batch after the first active batch
+      // Update gen_per_batch after the first active batch and the numer of particles after the first batch
 
       settings::new_gen_per_batch = settings::gen_per_batch;
       settings::gen_per_batch = 1;
+      settings::n_particles = settings::n_particles * settings::new_gen_per_batch;
+
+      // Reallocate banks to accomodate the new number of particles
+      calculate_work();
+      allocate_banks();
     } else {
       // We accumulate only the sum of contributions for each random sample to compute the total uncertainty
       simulation::time_tallies.start();

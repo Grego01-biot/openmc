@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <string>
 #include <unordered_set>
+#include <unordered_map> // Include the unordered_map header
 
 #include "pugixml.hpp"
 
@@ -85,6 +86,8 @@ extern std::string path_sourcepoint;      //!< path to a source file
 extern std::string path_statepoint;       //!< path to a statepoint file
 extern std::string weight_windows_file;   //!< Location of weight window file to
                                           //!< load on simulation initialization
+// Add new settings for user-specified nuclides and cross sections
+extern std::unordered_map<std::string, std::vector<std::string>> random_sample_xs; //(For EMC)
 
 // This is required because the c_str() may not be the first thing in
 // std::string. Sometimes it is, but it seems libc++ may not be like that
@@ -100,7 +103,7 @@ extern "C" int32_t
   max_write_lost_particles;       //!< maximum number of lost particles
                                   //!< to be written to files
 extern "C" int32_t gen_per_batch; //!< number of generations per batch
-extern "C" int32_t new_gen_per_batch; //!< new number of generations per batch
+extern "C" int32_t new_gen_per_batch; //!< new number of generations per batch (For EMC)
 extern "C" int64_t n_particles;   //!< number of particles per generation
 
 extern int64_t
@@ -172,6 +175,9 @@ void read_settings_xml();
 //! Read settings from XML node
 //! \param[in] root XML node for <settings>
 void read_settings_xml(pugi::xml_node root);
+
+//! Read the nuclides and cross sections to randomly sample
+void read_random_sample_xs(pugi::xml_node root);
 
 void free_memory_settings();
 

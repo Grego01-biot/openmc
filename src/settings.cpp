@@ -18,9 +18,11 @@
 #include "openmc/eigenvalue.h"
 #include "openmc/error.h"
 #include "openmc/file_utils.h"
+#include "openmc/material.h"
 #include "openmc/mcpl_interface.h"
 #include "openmc/mesh.h"
 #include "openmc/message_passing.h"
+#include "openmc/nuclide.h"
 #include "openmc/output.h"
 #include "openmc/plot.h"
 #include "openmc/random_lcg.h"
@@ -90,6 +92,7 @@ std::string path_sourcepoint;
 std::string path_statepoint;
 const char* path_statepoint_c {path_statepoint.c_str()};
 std::string weight_windows_file;
+std::unordered_map<std::string, std::vector<std::string>> random_sample_xs;
 
 int32_t n_inactive {0};
 int32_t max_lost_particles {10};
@@ -361,6 +364,11 @@ void read_settings_xml()
   write_message("Reading settings XML file...", 5);
 
   read_settings_xml(root);
+
+   // Read random sample cross sections for EMC
+  if (settings::EMC){
+    read_random_sample_xs(root);
+  }
 }
 
 void read_settings_xml(pugi::xml_node root)
@@ -1126,6 +1134,57 @@ void read_settings_xml(pugi::xml_node root)
     }
   }
 }
+
+void read_random_sample_xs(pugi::xml_node root)
+{
+  using namespace settings;
+  using namespace pugi;
+
+  // Read  user-specified nuclides and cross sections for random sampling
+  if (check_for_node(root, "random_sample_xs")) {
+    for (auto node : root.child("random_sample_xs").children("nuclide")) {
+      std::string nuclide_name = get_node_value(node, "name");
+      std::vector<std::string> xs_types;
+      for (auto xs_node : node.children("xs")) {
+        xs_types.push_back(xs_node.child_value());
+      }
+      random_sample_xs[nuclide_name] = xs_types;
+    }
+    /*  bool valid_nuclide = false;
+
+      // Check if the nuclide is defined in the materials
+      for (const auto& mat : model::materials) {
+        for (int i_nuc : mat->nuclide_) {
+          auto& nuc = data::nuclides[i_nuc];
+          if (nuc->name_ == nuclide_name) {
+            valid_nuclide = true;
+            break;
+          }
+        }
+        if (valid_nuclide) break;
+      }
+
+      if (!valid_nuclide) {
+        warning("Nuclide " + nuclide_name + " specified in random_sample_xs is not defined in the materials.");
+        continue;
+      }
+
+      for (auto xs_node : node.children("xs")) {
+        std::string xs_type = xs_node.child_value();
+        if (valid_xs_types.find(xs_type) != valid_xs_types.end()) {
+          xs_types.push_back(xs_type);
+        } else {
+          warning("Cross section type " + xs_type + " for nuclide " + nuclide_name + " is not valid.");
+        }
+      }
+
+      if (!xs_types.empty()) {
+        random_sample_xs[nuclide_name] = xs_types;
+      }*/
+    
+  }
+}
+
 
 void free_memory_settings()
 {

@@ -130,6 +130,9 @@ public:
   array<size_t, 902> reaction_index_;      //!< Index of each reaction
   vector<int> index_inelastic_scatter_;
 
+  friend void access_xs_types(const Nuclide& nuc, int& XS_TOTAL, int& XS_ABSORPTION,
+    int& XS_FISSION, int& XS_NU_FISSION, int& XS_PHOTON_PROD);
+
 private:
   void create_derived(
     const Function1D* prompt_photons, const Function1D* delayed_photons);

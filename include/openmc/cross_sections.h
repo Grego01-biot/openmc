@@ -81,6 +81,12 @@ void read_ce_cross_sections_xml();
 //! Load nuclide and thermal scattering data
 void finalize_cross_sections();
 
+//! Sample randomly cross sections for EMC
+void randomly_sample_cross_sections();
+
+//! Friend function definition to access XS from Nuclide.h
+void access_xs_types();
+
 void library_clear();
 
 } // namespace openmc
