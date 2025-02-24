@@ -35,6 +35,7 @@
 #include "openmc/tallies/filter_time.h"
 #include "openmc/tallies/filter_universe.h"
 #include "openmc/tallies/filter_zernike.h"
+#include "openmc/tallies/filter_score.h"
 #include "openmc/xml_interface.h"
 
 // explicit template instantiation definition
@@ -154,7 +155,9 @@ Filter* Filter::create(const std::string& type, int32_t id)
     return Filter::create<ZernikeFilter>(id);
   } else if (type == "zernikeradial") {
     return Filter::create<ZernikeRadialFilter>(id);
-  } else {
+  } else if (type == "score") {
+    return Filter::create<ScoreFilter>(id);
+  }  else {
     throw std::runtime_error {fmt::format("Unknown filter type: {}", type)};
   }
   return nullptr;

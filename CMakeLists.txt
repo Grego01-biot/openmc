@@ -439,6 +439,7 @@ list(APPEND libopenmc_SOURCES
   src/tallies/filter_musurface.cpp
   src/tallies/filter_particle.cpp
   src/tallies/filter_polar.cpp
+  src/tallies/filter_score.cpp
   src/tallies/filter_sph_harm.cpp
   src/tallies/filter_sptl_legendre.cpp
   src/tallies/filter_surface.cpp
