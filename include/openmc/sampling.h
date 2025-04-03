@@ -12,6 +12,11 @@
 
 namespace openmc {
 
+void initialize_xs_samples(double mean, double variance=0.01, int n_samples, unsigned int seed = 5489u);
+double get_next_xs_sample();
+
+// namespace openmc
+/*
 // Type of sampling 
 enum class SamplingType {
  NORMAL,
@@ -46,7 +51,7 @@ public:
     std::pair<xt::xtensor<double, 2>, xt::xtensor<double, 2>> qr_decomposition(const xt::xtensor<double, 2>& matrix);
     xt::xtensor<std::complex<double>, 2> compute_eigenvectors(const xt::xtensor<double, 2>& T, const xt::xtensor<double, 2>& U);
     xt::tensor<double, 2> cholesky_decomposition(xt::tensor<double, 2> covariance);
-
+*/
 };
 
 } // namespace openmc

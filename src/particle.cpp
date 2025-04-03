@@ -139,6 +139,7 @@ void Particle::from_source(const SourceSite* src)
   time() = src->time;
   time_last() = src->time;
   parent_nuclide() = src->parent_nuclide;
+  
 }
 
 void Particle::event_calculate_xs()
@@ -236,7 +237,6 @@ void Particle::event_advance()
     coord(j).r += distance * coord(j).u;
   }
   this->time() += distance / this->speed();
-
   // Kill particle if its time exceeds the cutoff
   bool hit_time_boundary = false;
   double time_cutoff = settings::time_cutoff[static_cast<int>(type())];

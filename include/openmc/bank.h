@@ -22,6 +22,8 @@ extern SharedArray<SourceSite> surf_source_bank;
 
 extern SharedArray<SourceSite> fission_bank;
 
+extern vector<SourceSite> fixed_source_bank;
+
 extern vector<int64_t> progeny_per_particle;
 
 } // namespace simulation

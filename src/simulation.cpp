@@ -240,12 +240,14 @@ int openmc_next_batch(int* status)
   }
 
   initialize_batch();
+  //fmt::print("Simulating batch {:<4} (active)\n", simulation::current_batch);
 
   // =======================================================================
   // LOOP OVER GENERATIONS
   for (current_gen = 1; current_gen <= settings::gen_per_batch; ++current_gen) {
 
     initialize_generation();
+    //fmt::print("Simulating generation {:<4} \n", current_gen);
 
     // Start timer for transport
     simulation::time_transport.start();
@@ -259,9 +261,11 @@ int openmc_next_batch(int* status)
 
     // Accumulate time for transport
     simulation::time_transport.stop();
-
+    //fmt::print("Accumulate time for transport \n", current_gen);
     finalize_generation();
+    //fmt::print("[DEBUG] Fission bank size = {}\n", simulation::fission_bank.size());
   }
+  //fmt::print("Finalizing batch {:<4} (active)\n", simulation::current_batch);
 
   finalize_batch();
 
@@ -342,10 +346,9 @@ void allocate_banks()
     } else {*/
     // Allocate source bank
     simulation::source_bank.resize(simulation::work_per_rank);
-
+    
     // Allocate fission bank
     init_fission_bank(3 * simulation::work_per_rank);
-    
   }
 
   if (settings::surf_source_write) {
@@ -393,12 +396,15 @@ void initialize_batch()
       t->active_ = true;
     }
   }
-
-  if (settings::EMC && simulation::current_batch > (settings::n_inactive + 1) )
-  {
-    //fmt::print("New random sample for nu-fission for batch {}\n", simulation::current_batch);
-    randomly_sample_cross_sections();
+  if (settings::EMC && simulation::current_batch > settings::n_inactive + 1) {
+    simulation::source_bank = simulation::fixed_source_bank;  // Reset every time
+    
+    //fmt::print(" Reusing inactive cycles fixed source bank for batch {}\n", simulation::current_batch);
   }
+
+    //fmt::print("New random sample for nu-fission for batch {}\n", simulation::current_batch);
+    //randomly_sample_cross_sections();
+  
   // Add user tallies to active tallies list
   setup_active_tallies();
 }
@@ -430,9 +436,11 @@ void finalize_batch()
       settings::gen_per_batch = 1;
       settings::n_particles = settings::n_particles * settings::new_gen_per_batch;
 
-      // Reallocate banks to accomodate the new number of particles
-      calculate_work();
-      allocate_banks();
+    if (simulation::current_batch == settings::n_inactive) {
+      simulation::fixed_source_bank = simulation::source_bank;  // Deep copy
+      //fmt::print(" Stored fixed source bank from inactive cycles.\n");
+    }
+
     } else {
       // We accumulate only the sum of contributions for each random sample to compute the total uncertainty
       simulation::time_tallies.start();
@@ -544,6 +552,11 @@ void initialize_generation()
     if (settings::ufs_on)
       ufs_count_sites();
 
+    if (settings::EMC && simulation::current_batch > settings::n_inactive + 1) {
+      xt::view(simulation::global_tallies, xt::all()) = 0.0;
+      simulation::keff_generation = 0.0;
+      //simulation::n_realizations = 0;
+    }
     // Store current value of tracklength k
     simulation::keff_generation = simulation::global_tallies(
       GlobalTally::K_TRACKLENGTH, TallyResult::VALUE);
@@ -577,10 +590,13 @@ void finalize_generation()
     // If using shared memory, stable sort the fission bank (by parent IDs)
     // so as to allow for reproducibility regardless of which order particles
     // are run in.
-    sort_fission_bank();
 
+    if (settings::EMC && simulation::current_batch < settings::n_inactive + 1) {
+    sort_fission_bank();
     // Distribute fission bank across processors evenly
     synchronize_bank();
+  }
+
   }
 
   if (settings::run_mode == RunMode::EIGENVALUE) {
@@ -608,7 +624,11 @@ void initialize_history(Particle& p, int64_t index_source)
   // set defaults
   if (settings::run_mode == RunMode::EIGENVALUE) {
     // set defaults for eigenvalue simulations from primary bank
+    //fmt::print("Simulating Particle {} from source bank \n", index_source -1);
     p.from_source(&simulation::source_bank[index_source - 1]);
+    if (p.E() < 0.1) {
+      fmt::print("Particle {} with Energy of Particle {} \n ", index_source - 1, p.E());
+    }
   } else if (settings::run_mode == RunMode::FIXED_SOURCE) {
     // initialize random number seed
     int64_t id = (simulation::total_gen + overall_generation() - 1) *
@@ -619,6 +639,7 @@ void initialize_history(Particle& p, int64_t index_source)
     auto site = sample_external_source(&seed);
     p.from_source(&site);
   }
+
   p.current_work() = index_source;
 
   // set identifier for particle

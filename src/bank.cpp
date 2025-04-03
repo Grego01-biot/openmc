@@ -26,6 +26,8 @@ SharedArray<SourceSite> surf_source_bank;
 // function.
 SharedArray<SourceSite> fission_bank;
 
+vector<SourceSite> fixed_source_bank;
+
 // Each entry in this vector corresponds to the number of progeny produced
 // this generation for the particle located at that index. This vector is
 // used to efficiently sort the fission bank after each iteration.

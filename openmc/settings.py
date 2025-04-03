@@ -392,6 +392,7 @@ class Settings:
         self._tabular_legendre = {}
 
         self._temperature = {}
+        self._random_sample_xs = {}
 
         # Cutoff subelement
         self._cutoff = None
@@ -421,6 +422,7 @@ class Settings:
         self._max_history_splits = None
         self._max_tracks = None
         self._use_decay_photons = None
+        self._EMC = None
 
         self._random_ray = {}
 
@@ -1206,6 +1208,33 @@ class Settings:
     def use_decay_photons(self, value):
         cv.check_type('use decay photons', value, bool)
         self._use_decay_photons = value
+    
+    @property
+    def EMC(self) -> bool:
+        return self._EMC
+    
+    @EMC.setter
+    def EMC(self, value: bool):
+        cv.check_type('EMC', value, bool)
+        self._EMC = value
+
+    @property
+    def random_sample_xs(self):
+         return self._random_sample_xs
+ 
+    @random_sample_xs.setter
+    def random_sample_xs(self, value):
+        if not isinstance(value, dict):
+            raise TypeError('random_sample_xs must be a dictionary')
+        for key, val in value.items():
+            if not isinstance(key, str):
+                raise TypeError('Nuclide names must be strings')
+            if not isinstance(val, list):
+                raise TypeError('Cross section types must be provided as a list')
+            for xs_type in val:
+                if not isinstance(xs_type, str):
+                    raise TypeError('Cross section types must be strings')
+        self._random_sample_xs = value
 
     def _create_run_mode_subelement(self, root):
         elem = ET.SubElement(root, "run_mode")
@@ -1659,6 +1688,11 @@ class Settings:
                 else:
                     subelement = ET.SubElement(element, key)
                     subelement.text = str(value)
+    
+    def _create_EMC_subelement(self, root):
+         if self._EMC is not None:
+             elem = ET.SubElement(root, "EMC")
+             elem.text = str(self._EMC)
 
     def _eigenvalue_from_xml_element(self, root):
         elem = root.find('eigenvalue')
@@ -2074,6 +2108,22 @@ class Settings:
         if text is not None:
             self.use_decay_photons = text in ('true', '1')
 
+    def _EMC_from_xml_element(self,root):
+         text = get_text(root, 'EMC')
+         if text is not None:
+             self.EMC = text in ('true', '1')
+     
+    def _create_random_sample_xs_subelement(self, root):
+        if self.random_sample_xs:
+            element = ET.SubElement(root, "random_sample_xs")
+            for nuclide, xs_types in self.random_sample_xs.items():
+                nuclide_element = ET.SubElement(element, "nuclide")
+                name_element = ET.SubElement(nuclide_element, "name")
+                name_element.text = nuclide
+                for xs_type in xs_types:
+                    xs_element = ET.SubElement(nuclide_element, "xs")
+                    xs_element.text = xs_type
+
     def to_xml_element(self, mesh_memo=None):
         """Create a 'settings' element to be written to an XML file.
 
@@ -2140,6 +2190,8 @@ class Settings:
         self._create_max_tracks_subelement(element)
         self._create_random_ray_subelement(element, mesh_memo)
         self._create_use_decay_photons_subelement(element)
+        self._create_EMC_subelement(element)
+        self._create_random_sample_xs_subelement(element)
 
         # Clean the indentation in the file to be user-readable
         clean_indentation(element)

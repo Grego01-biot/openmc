@@ -338,12 +338,18 @@ void calculate_average_keff()
   int i = overall_generation() - 1;
   int n;
   if (simulation::current_batch > settings::n_inactive) {
-    if (settings::new_gen_per_batch > settings::gen_per_batch) {
-      n = (settings::gen_per_batch * simulation::n_realizations) + (settings::new_gen_per_batch - settings::gen_per_batch) +
-          simulation::current_gen;
-    } else {
-      n = settings::new_gen_per_batch * simulation::n_realizations +
-          simulation::current_gen;
+    if (settings::EMC == true)
+    {
+      if (settings::new_gen_per_batch > settings::gen_per_batch) {
+        n = (settings::gen_per_batch * simulation::n_realizations) + (settings::new_gen_per_batch - settings::gen_per_batch) +
+            simulation::current_gen;
+      } else {
+        n = settings::new_gen_per_batch * simulation::n_realizations +
+            simulation::current_gen;
+      }
+    } else{
+      n = settings::gen_per_batch * simulation::n_realizations +
+      simulation::current_gen;
     }
   } else {
     n = 0;
@@ -352,17 +358,14 @@ void calculate_average_keff()
   if (n <= 0 || settings::new_gen_per_batch > settings::gen_per_batch) {
     // For inactive generations, use current generation k as estimate for next
     // generation
-
     simulation::keff = simulation::k_generation[i];
-    //fmt::print(" i= {}\n", i);
   } else {
     // Sample mean of keff
     simulation::k_sum[0] += simulation::k_generation[i];
     simulation::k_sum[1] += std::pow(simulation::k_generation[i], 2);
 
     // Determine mean
-    simulation::keff = simulation::k_sum[0] / n ;  
-    //fmt::print(" i= {}\n", i);
+    simulation::keff = simulation::k_sum[0] / n ;
     
     if (n > 1) {
       double t_value;
@@ -379,6 +382,7 @@ void calculate_average_keff()
         t_value *
         std::sqrt(
           (simulation::k_sum[1] / n - std::pow(simulation::keff, 2)) / (n - 1));
+      
     }
   }
 }
@@ -400,7 +404,7 @@ int openmc_get_keff(double* k_combined)
     return 0;
   }
 
-  if (simulation::n_realizations == 1 || settings::EMC == true) {
+  if (simulation::n_realizations == 1 && settings::EMC == true) {
     k_combined[0] = simulation::keff;
     k_combined[1] = simulation::keff_std;
     return 0;

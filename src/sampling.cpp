@@ -20,19 +20,49 @@
 
 namespace openmc {
 
+static std::vector<double> xs_samples;
+static size_t xs_sample_index = 0;
 
+void initialize_xs_samples(double mean, double variance=0.01, int n_samples, unsigned int seed = 5489u)
+{
+  if (variance < 0.0) {
+    throw std::invalid_argument("Variance must be non-negative");
+  }
+
+  xs_samples.clear();
+  xs_samples.reserve(n_samples);
+  xs_samples_index = 0;
+
+  std::default_random_engine generator(seed); 
+  std::normal_distribution<double> distribution(mean, std::sqrt(variance));
+
+  for (int i = 0; i < n_samples; ++i) {
+    double sample = distribution(generator);
+    xs_samples.push_back(sample);
+  }
+}
+
+double get_next_xs_sample()
+{
+  if (xs_samples.empty()) {
+    throw std::runtime_error("Cross section samples have not been initialized.");
+  }
+
+  // Wrap around if index exceeds size
+  if (xs_sample_index >= xs_samples.size()) {
+    xs_sample_index = 0;
+  }
+
+  return xs_samples[xs_sample_index++];
+}
+
+}
+/*
 void setMean(const xt::xtensor<double, 1>& mean) { _mean = mean; }
 
 void setCovar(const xt::xtensor<double, 2>& covar)
 {
   _covar = covar;
-
-  /*
-  While the Cholesky decomposition is particularly useful to solve selfadjoint 
-  problems like D^*D x = b, for that purpose, we recommend the Cholesky decomposition 
-  without square root which is more stable and even faster. 
-  Nevertheless, this standard Cholesky decomposition remains useful in many other situations 
-  like generalised eigen problems with hermitian matrices*/
 
   cov_symmetric = is_symmetric(_covar);
   cov_pos_definite = is_positive_definite(_covar);
@@ -243,3 +273,4 @@ void latin_hypercube_sampling(xt::xtensor<double, 2> mean, xt::xtensor<double, 2
 
 
 }
+*/

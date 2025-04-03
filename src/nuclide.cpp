@@ -617,7 +617,6 @@ void Nuclide::calculate_xs(
   int i_sab, int i_log_union, double sab_frac, Particle& p)
 {
   auto& micro {p.neutron_xs(index_)};
-
   // Initialize cached cross sections to zero
   micro.elastic = CACHE_INVALID;
   micro.thermal = 0.0;
@@ -753,6 +752,7 @@ void Nuclide::calculate_xs(
     micro.total =
       (1.0 - f) * xs(i_grid, XS_TOTAL) + f * xs(i_grid + 1, XS_TOTAL);
 
+    //fmt::print("micro total: {}\n", micro.total);
     // Calculate microscopic nuclide absorption cross section
     micro.absorption =
       (1.0 - f) * xs(i_grid, XS_ABSORPTION) + f * xs(i_grid + 1, XS_ABSORPTION);

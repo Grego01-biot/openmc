@@ -362,7 +362,6 @@ void access_xs_types(const Nuclide& nuc, int& XS_TOTAL, int& XS_ABSORPTION, int&
   XS_PHOTON_PROD = Nuclide::XS_PHOTON_PROD;
 }
 
-
 void randomly_sample_cross_sections()
 {
   // Modify continuous-energy cross sections
@@ -375,8 +374,8 @@ void randomly_sample_cross_sections()
       std::string nuclide_name = nuc->name_;
 
       // Access cross section type constants
-      int XS_TOTAL, XS_ABSORPTION, XS_FISSION, XS_NU_FISSION, XS_PHOTON_PROD;
-      access_xs_types(*nuc, XS_TOTAL, XS_ABSORPTION, XS_FISSION, XS_NU_FISSION, XS_PHOTON_PROD);
+      //int XS_TOTAL, XS_ABSORPTION, XS_FISSION, XS_NU_FISSION, XS_PHOTON_PROD;
+      //access_xs_types(*nuc, XS_TOTAL, XS_ABSORPTION, XS_FISSION, XS_NU_FISSION, XS_PHOTON_PROD);
       
       /*fmt::print("Contents of random sample XS:\n");
       for (const auto& entry : settings::random_sample_xs) {
@@ -406,7 +405,8 @@ void randomly_sample_cross_sections()
               // loop for different cross section values
               for (auto& value : xs)
               {
-                value *= 1.0 + (prn(&seed) - 0.5) * 0.2; // Example perturbation
+                value *= 1.0 + (prn(&seed) - 0.5) * 1.0; // Example perturbation
+                //fmt::print("Perturbed value: {}\n", value);
                 //count++;
               }
             }
