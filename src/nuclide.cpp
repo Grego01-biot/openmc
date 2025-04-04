@@ -752,7 +752,6 @@ void Nuclide::calculate_xs(
     micro.total =
       (1.0 - f) * xs(i_grid, XS_TOTAL) + f * xs(i_grid + 1, XS_TOTAL);
 
-    //fmt::print("micro total: {}\n", micro.total);
     // Calculate microscopic nuclide absorption cross section
     micro.absorption =
       (1.0 - f) * xs(i_grid, XS_ABSORPTION) + f * xs(i_grid + 1, XS_ABSORPTION);

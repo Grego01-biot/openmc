@@ -52,8 +52,8 @@ void calculate_generation_keff()
 
   // Get keff for this generation by subtracting off the starting value
   simulation::keff_generation =
-    gt(GlobalTally::K_TRACKLENGTH, TallyResult::VALUE) -
-    simulation::keff_generation;
+    gt(GlobalTally::K_TRACKLENGTH, TallyResult::VALUE) 
+     - simulation::keff_generation;
 
   double keff_reduced;
 #ifdef OPENMC_MPI
@@ -68,11 +68,13 @@ void calculate_generation_keff()
     // independently compute the same value of k. Thus, there is no need to
     // perform any additional MPI reduction here.
     keff_reduced = simulation::keff_generation;
+    
   }
 #else
   keff_reduced = simulation::keff_generation;
 #endif
 
+  //fmt::print("keff_reduced = {}\n", keff_reduced);
   // Normalize single batch estimate of k
   // TODO: This should be normalized by total_weight, not by n_particles
   if (settings::solver_type != SolverType::RANDOM_RAY) {
@@ -80,6 +82,12 @@ void calculate_generation_keff()
   }
 
   simulation::k_generation.push_back(keff_reduced);
+  
+  int index = simulation::k_generation.size() - 1;
+
+  // Print it
+  //fmt::print("keff_reduced inserted at index [{}]: {:.5f}\n", index, keff_reduced);
+  
 }
 
 void synchronize_bank()
@@ -355,10 +363,17 @@ void calculate_average_keff()
     n = 0;
   }
 
-  if (n <= 0 || settings::new_gen_per_batch > settings::gen_per_batch) {
-    // For inactive generations, use current generation k as estimate for next
-    // generation
-    simulation::keff = simulation::k_generation[i];
+  if (n <= 0 || settings::gen_per_batch < settings::new_gen_per_batch) {
+    if (settings::gen_per_batch == 1) {
+
+      i = simulation::k_generation.size() - 1;
+      simulation::keff = simulation::k_generation[i] * settings::new_gen_per_batch;
+      //fmt::print("keff in average keff = {}\n", simulation::keff);
+
+      } else{
+        // For inactive generations, use current generation k as estimate for next
+        simulation::keff = simulation::k_generation[i];
+      }
   } else {
     // Sample mean of keff
     simulation::k_sum[0] += simulation::k_generation[i];

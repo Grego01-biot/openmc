@@ -527,21 +527,19 @@ double EMC_keff_uncertainty()
   int n_active_batches = settings::n_batches - settings::n_inactive;
   if (n_active_batches <= 1) return 0.0;
 
-  //fmt::print("n_active_batches = {}\n", n_active_batches);
   // Compute the mean of keff values for active batches
   double mean_keff = simulation::keff_first_batch/n_active_batches;
-  fmt::print("first batch keff= {:.8f}\n", mean_keff);
-  fmt::print("active batches = {}\n", n_active_batches);
-  for (int i = settings::n_inactive + 1 ; i < settings::n_batches ; ++i) {
-    fmt::print("k_generation[{}] = {:.8f}\n", i, simulation::k_generation[i]);
-    mean_keff += simulation::k_generation[i]/(n_active_batches);
+  int random_samples = simulation::k_generation.size()- (n_active_batches + 1);
+
+  for (int j = simulation::k_generation.size() -1 ; j >= random_samples ; --j) {
+    mean_keff += simulation::k_generation[j]*settings::new_gen_per_batch/(n_active_batches);
   }
-  fmt::print("mean_keff = {:.8f}\n", mean_keff);
+
   // Compute the variance
   double variance = (1.0/(n_active_batches - 1)) * (simulation::keff_first_batch - mean_keff) * (simulation::keff_first_batch - mean_keff);
-  //fmt::print("first batch keff= {:.8f}\n", simulation::keff_first_batch);
+  
   for (int i = settings::n_inactive + 1 ; i < settings::n_batches; ++i) {
-    //fmt::print("k_generation[{}] = {:.8f}\n", i, simulation::k_generation[i]);
+
     variance += (1.0/(n_active_batches - 1))*( (simulation::k_generation[i] - mean_keff) * (simulation::k_generation[i] - mean_keff) );
   }
 

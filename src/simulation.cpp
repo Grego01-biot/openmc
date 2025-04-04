@@ -398,12 +398,12 @@ void initialize_batch()
   }
   if (settings::EMC && simulation::current_batch > settings::n_inactive + 1) {
     simulation::source_bank = simulation::fixed_source_bank;  // Reset every time
-    
+    randomly_sample_cross_sections();
     //fmt::print(" Reusing inactive cycles fixed source bank for batch {}\n", simulation::current_batch);
   }
 
     //fmt::print("New random sample for nu-fission for batch {}\n", simulation::current_batch);
-    //randomly_sample_cross_sections();
+    
   
   // Add user tallies to active tallies list
   setup_active_tallies();
@@ -555,7 +555,6 @@ void initialize_generation()
     if (settings::EMC && simulation::current_batch > settings::n_inactive + 1) {
       xt::view(simulation::global_tallies, xt::all()) = 0.0;
       simulation::keff_generation = 0.0;
-      //simulation::n_realizations = 0;
     }
     // Store current value of tracklength k
     simulation::keff_generation = simulation::global_tallies(
@@ -609,7 +608,6 @@ void finalize_generation()
     // Collect results and statistics
     calculate_generation_keff();
 
-    // TO DO: modify this function when not first active batch (no sum_sq accumulated)
     calculate_average_keff();
 
     // Write generation output
@@ -624,11 +622,8 @@ void initialize_history(Particle& p, int64_t index_source)
   // set defaults
   if (settings::run_mode == RunMode::EIGENVALUE) {
     // set defaults for eigenvalue simulations from primary bank
-    //fmt::print("Simulating Particle {} from source bank \n", index_source -1);
     p.from_source(&simulation::source_bank[index_source - 1]);
-    if (p.E() < 0.1) {
-      fmt::print("Particle {} with Energy of Particle {} \n ", index_source - 1, p.E());
-    }
+    
   } else if (settings::run_mode == RunMode::FIXED_SOURCE) {
     // initialize random number seed
     int64_t id = (simulation::total_gen + overall_generation() - 1) *
