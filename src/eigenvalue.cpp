@@ -368,7 +368,6 @@ void calculate_average_keff()
 
       i = simulation::k_generation.size() - 1;
       simulation::keff = simulation::k_generation[i] * settings::new_gen_per_batch;
-      //fmt::print("keff in average keff = {}\n", simulation::keff);
 
       } else{
         // For inactive generations, use current generation k as estimate for next

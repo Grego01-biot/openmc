@@ -336,14 +336,7 @@ void allocate_banks()
 {
   if (settings::run_mode == RunMode::EIGENVALUE &&
       settings::solver_type == SolverType::MONTE_CARLO) {
-    
-    /*if (settings::EMC){
-      // Allocate source bank
-      simulation::source_bank.resize(settings::n_particles);
 
-      // Allocate fission bank
-      simulation::fission_bank.resize(3 * settings::n_particles);
-    } else {*/
     // Allocate source bank
     simulation::source_bank.resize(simulation::work_per_rank);
     
@@ -399,12 +392,7 @@ void initialize_batch()
   if (settings::EMC && simulation::current_batch > settings::n_inactive + 1) {
     simulation::source_bank = simulation::fixed_source_bank;  // Reset every time
     randomly_sample_cross_sections();
-    //fmt::print(" Reusing inactive cycles fixed source bank for batch {}\n", simulation::current_batch);
   }
-
-    //fmt::print("New random sample for nu-fission for batch {}\n", simulation::current_batch);
-    
-  
   // Add user tallies to active tallies list
   setup_active_tallies();
 }
@@ -438,7 +426,6 @@ void finalize_batch()
 
     if (simulation::current_batch == settings::n_inactive) {
       simulation::fixed_source_bank = simulation::source_bank;  // Deep copy
-      //fmt::print(" Stored fixed source bank from inactive cycles.\n");
     }
 
     } else {
@@ -860,6 +847,7 @@ void transport_history_based()
   for (int64_t i_work = 1; i_work <= simulation::work_per_rank; ++i_work) {
     Particle p;
     initialize_history(p, i_work);
+    //fmt::print("Simulating particle {} \n", i_work);
     transport_history_based_single_particle(p);
   }
 }
