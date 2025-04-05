@@ -337,9 +337,14 @@ void allocate_banks()
   if (settings::run_mode == RunMode::EIGENVALUE &&
       settings::solver_type == SolverType::MONTE_CARLO) {
 
-    // Allocate source bank
-    simulation::source_bank.resize(simulation::work_per_rank);
-    
+    if (settings::EMC && simulation::current_batch == settings::n_inactive + 1) {
+      // First active batch: store full 10 generations
+      int64_t total_source_particles = settings::gen_per_batch * settings::n_particles;
+      simulation::source_bank.resize(total_source_particles);
+      simulation::fixed_source_bank.resize(total_source_particles);
+    } else {
+      simulation::source_bank.resize(simulation::work_per_rank);
+    }
     // Allocate fission bank
     init_fission_bank(3 * simulation::work_per_rank);
   }
@@ -382,15 +387,24 @@ void initialize_batch()
   // Manage active/inactive timers and activate tallies if necessary.
   if (first_inactive) {
     simulation::time_inactive.start();
+    
   } else if (first_active) {
     simulation::time_inactive.stop();
     simulation::time_active.start();
+    allocate_banks();
     for (auto& t : model::tallies) {
       t->active_ = true;
     }
   }
   if (settings::EMC && simulation::current_batch > settings::n_inactive + 1) {
-    simulation::source_bank = simulation::fixed_source_bank;  // Reset every time
+    calculate_work();
+   
+    fmt::print("Fixed source size: {}\n", simulation::fixed_source_bank.size());
+    simulation::source_bank.resize(simulation::fixed_source_bank.size());
+    std::copy(
+      simulation::fixed_source_bank.begin(),
+      simulation::fixed_source_bank.end(),
+      simulation::source_bank.begin());
     randomly_sample_cross_sections();
   }
   // Add user tallies to active tallies list
@@ -424,9 +438,12 @@ void finalize_batch()
       settings::gen_per_batch = 1;
       settings::n_particles = settings::n_particles * settings::new_gen_per_batch;
 
-    if (simulation::current_batch == settings::n_inactive) {
+    /*if (simulation::current_batch == settings::n_inactive + 1 ) {
+      fmt::print("Current batch: {}\n", simulation::current_batch);
+      fmt::print("Number of particles: {}\n", settings::n_particles);
+      fmt::print("Size of inactive source bank: {}\n", simulation:: source_bank.size());
       simulation::fixed_source_bank = simulation::source_bank;  // Deep copy
-    }
+    }*/
 
     } else {
       // We accumulate only the sum of contributions for each random sample to compute the total uncertainty
@@ -581,8 +598,16 @@ void finalize_generation()
     sort_fission_bank();
     // Distribute fission bank across processors evenly
     synchronize_bank();
-  }
-
+    }
+    if (settings::EMC && simulation::current_batch == settings::n_inactive + 1)
+    {
+      int gen_idx = simulation::current_gen - 1;
+      int offset = gen_idx * settings::n_particles;
+      std::copy(
+        simulation::source_bank.begin(),
+        simulation::source_bank.end(),
+        simulation::fixed_source_bank.begin() + offset);
+    }  
   }
 
   if (settings::run_mode == RunMode::EIGENVALUE) {
@@ -609,6 +634,7 @@ void initialize_history(Particle& p, int64_t index_source)
   // set defaults
   if (settings::run_mode == RunMode::EIGENVALUE) {
     // set defaults for eigenvalue simulations from primary bank
+    //fmt::print("Size of source bank: {}\n", simulation::source_bank.size());
     p.from_source(&simulation::source_bank[index_source - 1]);
     
   } else if (settings::run_mode == RunMode::FIXED_SOURCE) {
@@ -688,26 +714,61 @@ int overall_generation()
 
 void calculate_work()
 {
-  // Determine minimum amount of particles to simulate on each processor
-  int64_t min_work = settings::n_particles / mpi::n_procs;
-
-  // Determine number of processors that have one extra particle
-  int64_t remainder = settings::n_particles % mpi::n_procs;
-
+  int64_t n_particles = 0;
+  int64_t min_work = 0;
+  int64_t remainder = 0;
   int64_t i_bank = 0;
-  simulation::work_index.resize(mpi::n_procs + 1);
-  simulation::work_index[0] = 0;
-  for (int i = 0; i < mpi::n_procs; ++i) {
-    // Number of particles for rank i
-    int64_t work_i = i < remainder ? min_work + 1 : min_work;
+  int64_t work_i = 0;
 
-    // Set number of particles
-    if (mpi::rank == i)
-      simulation::work_per_rank = work_i;
+  if (settings::EMC && simulation::current_batch > settings::n_inactive + 1) {
 
-    // Set index into source bank for rank i
-    i_bank += work_i;
-    simulation::work_index[i + 1] = i_bank;
+    // Determine minimum amount of particles to simulate on each processor
+    min_work = settings::n_particles * settings::new_gen_per_batch / mpi::n_procs;
+
+    min_work = settings::n_particles * settings::new_gen_per_batch / mpi::n_procs;
+
+    // Determine number of processors that have one extra particle
+    remainder = ( settings::n_particles * settings::new_gen_per_batch) % mpi::n_procs;
+
+    i_bank = 0;
+    simulation::work_index.resize(mpi::n_procs + 1);
+    simulation::work_index[0] = 0;
+    for (int i = 0; i < mpi::n_procs; ++i) {
+      // Number of particles for rank i
+      work_i = i < remainder ? min_work + 1 : min_work;
+
+      // Set number of particles
+      if (mpi::rank == i)
+        simulation::work_per_rank = work_i;
+
+      // Set index into source bank for rank i
+      i_bank += work_i;
+      simulation::work_index[i + 1] = i_bank;
+    }
+  } else {
+    // Determine minimum amount of particles to simulate on each processor
+    min_work = settings::n_particles / mpi::n_procs;
+
+    min_work = settings::n_particles / mpi::n_procs;
+
+    // Determine number of processors that have one extra particle
+    remainder = settings::n_particles % mpi::n_procs;
+
+    i_bank = 0;
+    simulation::work_index.resize(mpi::n_procs + 1);
+    simulation::work_index[0] = 0;
+    for (int i = 0; i < mpi::n_procs; ++i) {
+      // Number of particles for rank i
+      work_i = i < remainder ? min_work + 1 : min_work;
+
+      // Set number of particles
+      if (mpi::rank == i)
+        simulation::work_per_rank = work_i;
+
+      // Set index into source bank for rank i
+      i_bank += work_i;
+      simulation::work_index[i + 1] = i_bank;
+    }
   }
 }
 
