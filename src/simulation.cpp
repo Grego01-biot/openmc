@@ -337,14 +337,9 @@ void allocate_banks()
   if (settings::run_mode == RunMode::EIGENVALUE &&
       settings::solver_type == SolverType::MONTE_CARLO) {
 
-    if (settings::EMC && simulation::current_batch == settings::n_inactive + 1) {
-      // First active batch: store full 10 generations
-      int64_t total_source_particles = settings::gen_per_batch * settings::n_particles;
-      simulation::source_bank.resize(total_source_particles);
-      simulation::fixed_source_bank.resize(total_source_particles);
-    } else {
-      simulation::source_bank.resize(simulation::work_per_rank);
-    }
+    // Allocate source bank
+    simulation::source_bank.resize(simulation::work_per_rank);
+    
     // Allocate fission bank
     init_fission_bank(3 * simulation::work_per_rank);
   }
@@ -397,14 +392,13 @@ void initialize_batch()
     }
   }
   if (settings::EMC && simulation::current_batch > settings::n_inactive + 1) {
-    calculate_work();
-   
-    fmt::print("Fixed source size: {}\n", simulation::fixed_source_bank.size());
+    //calculate_work();
+    /*fmt::print("Fixed source size: {}\n", simulation::fixed_source_bank.size());
     simulation::source_bank.resize(simulation::fixed_source_bank.size());
     std::copy(
       simulation::fixed_source_bank.begin(),
       simulation::fixed_source_bank.end(),
-      simulation::source_bank.begin());
+      simulation::source_bank.begin());*/
     randomly_sample_cross_sections();
   }
   // Add user tallies to active tallies list
@@ -436,7 +430,7 @@ void finalize_batch()
 
       settings::new_gen_per_batch = settings::gen_per_batch;
       settings::gen_per_batch = 1;
-      settings::n_particles = settings::n_particles * settings::new_gen_per_batch;
+      //settings::n_particles = settings::n_particles * settings::new_gen_per_batch;
 
     /*if (simulation::current_batch == settings::n_inactive + 1 ) {
       fmt::print("Current batch: {}\n", simulation::current_batch);
@@ -593,21 +587,10 @@ void finalize_generation()
     // If using shared memory, stable sort the fission bank (by parent IDs)
     // so as to allow for reproducibility regardless of which order particles
     // are run in.
-
-    if (settings::EMC && simulation::current_batch < settings::n_inactive + 1) {
     sort_fission_bank();
+
     // Distribute fission bank across processors evenly
     synchronize_bank();
-    }
-    if (settings::EMC && simulation::current_batch == settings::n_inactive + 1)
-    {
-      int gen_idx = simulation::current_gen - 1;
-      int offset = gen_idx * settings::n_particles;
-      std::copy(
-        simulation::source_bank.begin(),
-        simulation::source_bank.end(),
-        simulation::fixed_source_bank.begin() + offset);
-    }  
   }
 
   if (settings::run_mode == RunMode::EIGENVALUE) {
@@ -714,62 +697,27 @@ int overall_generation()
 
 void calculate_work()
 {
-  int64_t n_particles = 0;
-  int64_t min_work = 0;
-  int64_t remainder = 0;
-  int64_t i_bank = 0;
-  int64_t work_i = 0;
+   // Determine minimum amount of particles to simulate on each processor
+   int64_t min_work = settings::n_particles / mpi::n_procs;
 
-  if (settings::EMC && simulation::current_batch > settings::n_inactive + 1) {
-
-    // Determine minimum amount of particles to simulate on each processor
-    min_work = settings::n_particles * settings::new_gen_per_batch / mpi::n_procs;
-
-    min_work = settings::n_particles * settings::new_gen_per_batch / mpi::n_procs;
-
-    // Determine number of processors that have one extra particle
-    remainder = ( settings::n_particles * settings::new_gen_per_batch) % mpi::n_procs;
-
-    i_bank = 0;
-    simulation::work_index.resize(mpi::n_procs + 1);
-    simulation::work_index[0] = 0;
-    for (int i = 0; i < mpi::n_procs; ++i) {
-      // Number of particles for rank i
-      work_i = i < remainder ? min_work + 1 : min_work;
-
-      // Set number of particles
-      if (mpi::rank == i)
-        simulation::work_per_rank = work_i;
-
-      // Set index into source bank for rank i
-      i_bank += work_i;
-      simulation::work_index[i + 1] = i_bank;
-    }
-  } else {
-    // Determine minimum amount of particles to simulate on each processor
-    min_work = settings::n_particles / mpi::n_procs;
-
-    min_work = settings::n_particles / mpi::n_procs;
-
-    // Determine number of processors that have one extra particle
-    remainder = settings::n_particles % mpi::n_procs;
-
-    i_bank = 0;
-    simulation::work_index.resize(mpi::n_procs + 1);
-    simulation::work_index[0] = 0;
-    for (int i = 0; i < mpi::n_procs; ++i) {
-      // Number of particles for rank i
-      work_i = i < remainder ? min_work + 1 : min_work;
-
-      // Set number of particles
-      if (mpi::rank == i)
-        simulation::work_per_rank = work_i;
-
-      // Set index into source bank for rank i
-      i_bank += work_i;
-      simulation::work_index[i + 1] = i_bank;
-    }
-  }
+   // Determine number of processors that have one extra particle
+   int64_t remainder = settings::n_particles % mpi::n_procs;
+ 
+   int64_t i_bank = 0;
+   simulation::work_index.resize(mpi::n_procs + 1);
+   simulation::work_index[0] = 0;
+   for (int i = 0; i < mpi::n_procs; ++i) {
+     // Number of particles for rank i
+     int64_t work_i = i < remainder ? min_work + 1 : min_work;
+ 
+     // Set number of particles
+     if (mpi::rank == i)
+       simulation::work_per_rank = work_i;
+ 
+     // Set index into source bank for rank i
+     i_bank += work_i;
+     simulation::work_index[i + 1] = i_bank;
+   }
 }
 
 void initialize_data()
