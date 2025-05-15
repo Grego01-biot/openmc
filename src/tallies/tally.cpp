@@ -1127,7 +1127,7 @@ void accumulate_EMC_tallies()
     auto& gt = simulation::global_tallies;
 
     if (settings::run_mode == RunMode::EIGENVALUE) {
-      if (simulation::current_batch > settings::n_inactive) {
+      if (simulation::current_batch > settings::n_inactive + 1) {
         // Accumulate products of different estimators of k
         double k_col = gt(GlobalTally::K_COLLISION, TallyResult::VALUE) /
                        simulation::total_weight;

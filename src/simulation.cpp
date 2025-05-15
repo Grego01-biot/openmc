@@ -266,7 +266,7 @@ int openmc_next_batch(int* status)
     finalize_generation();
     //fmt::print("[DEBUG] Fission bank size = {}\n", simulation::fission_bank.size());
   }
-  //fmt::print("Finalizing batch {:<4} (active)\n", simulation::current_batch);
+  //fmt::print("Finalizing batch {:<4} \n", simulation::current_batch);
 
   finalize_batch();
 
@@ -325,6 +325,7 @@ const RegularMesh* entropy_mesh {nullptr};
 const RegularMesh* ufs_mesh {nullptr};
 
 vector<double> k_generation;
+vector<double> k_generation_emc;
 vector<int64_t> work_index;
 
 } // namespace simulation
@@ -341,7 +342,7 @@ void allocate_banks()
     // Allocate source bank
     simulation::source_bank.resize(simulation::work_per_rank);
     
-    // Allocate fission bank
+    // Allocate fission bank and initial fission bank
     init_fission_bank(3 * simulation::work_per_rank);
 
     // Allocate IFP bank
@@ -390,22 +391,23 @@ void initialize_batch()
     simulation::time_inactive.start();
     
   } else if (first_active) {
+    //fmt::print("First active batch: \n");
+    calculate_work_first_active_batch();
+    //fmt::print("work_per_rank for first active batch = {}\n", simulation::work_per_rank);
     simulation::time_inactive.stop();
     simulation::time_active.start();
-    allocate_banks();
     for (auto& t : model::tallies) {
       t->active_ = true;
     }
   }
   if (settings::EMC && simulation::current_batch > settings::n_inactive + 1) {
-    //calculate_work();
-    /*fmt::print("Fixed source size: {}\n", simulation::fixed_source_bank.size());
-    simulation::source_bank.resize(simulation::fixed_source_bank.size());
-    std::copy(
-      simulation::fixed_source_bank.begin(),
-      simulation::fixed_source_bank.end(),
-      simulation::source_bank.begin());*/
-    randomly_sample_cross_sections();
+    //fmt::print("Only active batches with perturbed data!");
+    simulation::k_generation.clear();
+    simulation::k_sum[0] = 0.0;
+    simulation::k_sum[1] = 0.0;
+    //xt::view(simulation::global_tallies, xt::all()) = 0.0;
+    // use the same source bank obtained after the end of inactive cycles for all active cycles
+    //randomly_sample_cross_sections();
   }
   // Add user tallies to active tallies list
   setup_active_tallies();
@@ -413,16 +415,27 @@ void initialize_batch()
 
 void finalize_batch()
 {
-  if (!settings::EMC){
+  if (settings::EMC == false){
     simulation::time_tallies.start();
     accumulate_tallies();
     simulation::time_tallies.stop();
   } else {
+    //fmt::print("Finalizing batch with EMC: \n");
     bool first_active = false;
     if (!settings::restart_run) {
       first_active = simulation::current_batch == settings::n_inactive + 1;
     } else if (simulation::current_batch == simulation::restart_batch + 1) {
       first_active = !(simulation::restart_batch < settings::n_inactive);
+    }
+
+    if (simulation::current_batch == settings::n_inactive) {
+      //fmt::print("Finalize last inactive batch: \n");
+      simulation::initial_fission_bank.resize(simulation::fission_bank.size());
+      for (std::size_t i = 0; i < simulation::fission_bank.size(); ++i) {
+        simulation::initial_fission_bank[i] = simulation::fission_bank[i];
+      }
+      //fmt::print("Fission Bank size = {}\n", simulation::fission_bank.size());
+      //fmt::print("Initial Fission Bank size = {}\n", simulation::initial_fission_bank.size()); 
     }
     // Reduce tallies onto master process and accumulate
     if ((first_active) && (simulation::current_batch > settings::n_inactive)){
@@ -431,20 +444,15 @@ void finalize_batch()
       accumulate_tallies();
       compute_statistical_uncertainty();
       simulation::time_tallies.stop();
-
+      
       // Update gen_per_batch after the first active batch and the numer of particles after the first batch
 
       settings::new_gen_per_batch = settings::gen_per_batch;
       settings::gen_per_batch = 1;
-      //settings::n_particles = settings::n_particles * settings::new_gen_per_batch;
-
-    /*if (simulation::current_batch == settings::n_inactive + 1 ) {
-      fmt::print("Current batch: {}\n", simulation::current_batch);
-      fmt::print("Number of particles: {}\n", settings::n_particles);
-      fmt::print("Size of inactive source bank: {}\n", simulation:: source_bank.size());
-      simulation::fixed_source_bank = simulation::source_bank;  // Deep copy
-    }*/
-
+      // re-adjust work per rank after the first active batch
+      calculate_work();
+      //fmt::print("work_per_rank after active batch = {}\n", simulation::work_per_rank);
+ 
     } else {
       // We accumulate only the sum of contributions for each random sample to compute the total uncertainty
       simulation::time_tallies.start();
@@ -557,12 +565,15 @@ void initialize_generation()
       ufs_count_sites();
 
     if (settings::EMC && simulation::current_batch > settings::n_inactive + 1) {
+      //fmt::print("We are initializing keff based in the inactive cycle:");
+      
       xt::view(simulation::global_tallies, xt::all()) = 0.0;
       simulation::keff_generation = 0.0;
-    }
+    } else {
     // Store current value of tracklength k
     simulation::keff_generation = simulation::global_tallies(
       GlobalTally::K_TRACKLENGTH, TallyResult::VALUE);
+    }
   }
 }
 
@@ -593,8 +604,11 @@ void finalize_generation()
     // If using shared memory, stable sort the fission bank (by parent IDs)
     // so as to allow for reproducibility regardless of which order particles
     // are run in.
+    //fmt::print("Sorting fission bank...\n");
+    //fmt::print("Fission bank size before sorting = {}\n", simulation::fission_bank.size());
     sort_fission_bank();
 
+    //fmt::print("Fission bank size after sorting = {}\n", simulation::fission_bank.size());
     // Distribute fission bank across processors evenly
     synchronize_bank();
   }
@@ -724,6 +738,37 @@ void calculate_work()
      i_bank += work_i;
      simulation::work_index[i + 1] = i_bank;
    }
+}
+
+void calculate_work_first_active_batch()
+{
+  int64_t particles = settings::n_particles / settings::gen_per_batch;
+  
+  if (particles < 1) {
+    fatal_error("n_particles < gen_per_batch for first active batch; "
+                "please increase n_particles or decrease gen_per_batch.");
+  }
+  // Determine minimum amount of particles to simulate on each processor
+  int64_t min_work = particles / mpi::n_procs;
+
+  // Determine number of processors that have one extra particle
+  int64_t remainder = particles % mpi::n_procs;
+
+  int64_t i_bank = 0;
+  simulation::work_index.resize(mpi::n_procs + 1);
+  simulation::work_index[0] = 0;
+  for (int i = 0; i < mpi::n_procs; ++i) {
+    // Number of particles for rank i
+    int64_t work_i = i < remainder ? min_work + 1 : min_work;
+
+    // Set number of particles
+    if (mpi::rank == i)
+      simulation::work_per_rank = work_i;
+
+    // Set index into source bank for rank i
+    i_bank += work_i;
+    simulation::work_index[i + 1] = i_bank;
+  }
 }
 
 void initialize_data()

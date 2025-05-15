@@ -515,7 +515,7 @@ std::pair<double, double> EMC_uncertainty(const double* x, int n)
 {
   double mean = x[static_cast<int>(TallyResult::SUM)] / n;
   double var_tot = 
-    n > 1 ? (1/n-1) * (x[static_cast<int>(TallyResult::SUM)] - mean )
+    n > 1 ? (1/n-1) * (x[static_cast<int>(TallyResult::SUM_SQ)] / n - mean * mean )
           : 0.0;
   double var_stat = x[static_cast<int>(TallyResult::VAR)];
   double var_nuclear_data = var_tot - var_stat;
@@ -529,18 +529,16 @@ double EMC_keff_uncertainty()
 
   // Compute the mean of keff values for active batches
   double mean_keff = simulation::keff_first_batch/n_active_batches;
-  int random_samples = simulation::k_generation.size()- (n_active_batches + 1);
+  int random_samples = simulation::k_generation_emc.size();
 
-  for (int j = simulation::k_generation.size() -1 ; j >= random_samples ; --j) {
-    mean_keff += simulation::k_generation[j]*settings::new_gen_per_batch/(n_active_batches);
+  for (int j = 0 ; j < random_samples ; ++j) {
+    mean_keff += simulation::k_generation_emc[j]*settings::gen_per_batch/(n_active_batches);
   }
-
   // Compute the variance
-  double variance = (1.0/(n_active_batches - 1)) * (simulation::keff_first_batch - mean_keff) * (simulation::keff_first_batch - mean_keff);
+  double variance = (1.0/(n_active_batches - 1)) * ( (simulation::keff_first_batch - mean_keff) * (simulation::keff_first_batch - mean_keff));
   
-  for (int i = settings::n_inactive + 1 ; i < settings::n_batches; ++i) {
-
-    variance += (1.0/(n_active_batches - 1))*( (simulation::k_generation[i] - mean_keff) * (simulation::k_generation[i] - mean_keff) );
+  for (int i = 0 ; i < random_samples; ++i) {
+    variance += (1.0/(n_active_batches - 1))*( (simulation::k_generation_emc[i] - mean_keff) * (simulation::k_generation_emc[i] - mean_keff) ) ;
   }
 
   return variance;

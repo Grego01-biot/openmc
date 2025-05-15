@@ -52,9 +52,12 @@ void calculate_generation_keff()
   const auto& gt = simulation::global_tallies;
 
   // Get keff for this generation by subtracting off the starting value
+  //fmt::print("tracklength global at the end of the generation {:.5f}\n", gt(GlobalTally::K_TRACKLENGTH, TallyResult::VALUE) );
+  //fmt::print("Initial keff generation {:.5f}\n", simulation::keff_generation);
   simulation::keff_generation =
     gt(GlobalTally::K_TRACKLENGTH, TallyResult::VALUE) 
      - simulation::keff_generation;
+  
 
   double keff_reduced;
 #ifdef OPENMC_MPI
@@ -78,12 +81,26 @@ void calculate_generation_keff()
   //fmt::print("keff_reduced = {}\n", keff_reduced);
   // Normalize single batch estimate of k
   // TODO: This should be normalized by total_weight, not by n_particles
+  bool first_active = ( simulation::current_batch == settings::n_inactive + 1);
   if (settings::solver_type != SolverType::RANDOM_RAY) {
-    keff_reduced /= settings::n_particles;
+    if (first_active)
+    {
+      keff_reduced /= (settings::n_particles / settings::gen_per_batch);
+    }
+    else
+    {
+      keff_reduced /= settings::n_particles;
+    }
   }
-
-  simulation::k_generation.push_back(keff_reduced);
-  
+  if (simulation::current_batch > settings::n_inactive + 1)
+  { 
+    simulation::k_generation_emc.push_back(keff_reduced);
+    fmt::print("keff generation {:.5f}\n", keff_reduced);
+    //simulation::k_generation.push_back(keff_reduced);
+  } 
+  else {
+    simulation::k_generation.push_back(keff_reduced);
+  }
   int index = simulation::k_generation.size() - 1;
 
   // Print it
@@ -94,8 +111,24 @@ void calculate_generation_keff()
 void synchronize_bank()
 {
   simulation::time_bank.start();
-
-  // In order to properly understand the fission bank algorithm, you need to
+  bool is_active = (simulation::current_batch > settings::n_inactive);
+  if (is_active) {
+    //fmt::print("Distributing fission bank with initial fission bank...\n");
+    // First, allocate the SharedArray to match the std::vector size
+    simulation::fission_bank.resize(simulation::initial_fission_bank.size());
+    for (std::size_t i = 0; i < simulation::initial_fission_bank.size(); ++i) {
+      simulation::fission_bank[i] = simulation::initial_fission_bank[i];
+    }
+  }
+  bool active = (simulation::current_batch == settings::n_inactive + 1);
+  if (active)
+  {
+    int64_t new_size = 3 * settings::n_particles / settings::gen_per_batch;
+    simulation::fission_bank.resize(new_size);
+  }
+  //fmt::print("Fission bank size = {}\n", simulation::fission_bank.size());
+  //fmt::print("Number of particles per gen per batch", simulation::work_per_rank);
+    // In order to properly understand the fission bank algorithm, you need to
   // think of the fission and source bank as being one global array divided
   // over multiple processors. At the start, each processor has a random amount
   // of fission bank sites -- each processor needs to know the total number of
@@ -145,11 +178,18 @@ void synchronize_bank()
 
   // Determine how many fission sites we need to sample from the source bank
   // and the probability for selecting a site.
-
+  
   int64_t sites_needed;
-  if (total < settings::n_particles) {
+  //fmt::print("finish value = {}\n", finish);
+  //fmt::print("total value = {}\n ", total);
+  
+  if (active) {
+    sites_needed = settings::n_particles / settings::gen_per_batch;
+    //fmt::print("First active batch: sites needed = {}\n", sites_needed);
+  } else if (total < settings::n_particles) {
     sites_needed = settings::n_particles % total;
-  } else {
+  }
+  else {
     sites_needed = settings::n_particles;
   }
   double p_sample = static_cast<double>(sites_needed) / total;
@@ -180,7 +220,19 @@ void synchronize_bank()
     // int(n_particles/total) sites to temp_sites. For example, if you need
     // 1000 and 300 were banked, this would add 3 source sites per banked site
     // and the remaining 100 would be randomly sampled.
-    if (total < settings::n_particles) {
+    if (active)
+    { if (total < sites_needed)
+      {
+        for (int64_t j = 1; j <= sites_needed ; ++j) {
+          temp_sites[index_temp] = site;
+          if (settings::ifp_on) {
+            copy_ifp_data_from_fission_banks(
+              i, temp_delayed_groups[index_temp], temp_lifetimes[index_temp]);
+          }
+          ++index_temp;
+        }
+      }
+    } else if (total < settings::n_particles) {
       for (int64_t j = 1; j <= settings::n_particles / total; ++j) {
         temp_sites[index_temp] = site;
         if (settings::ifp_on) {
@@ -228,34 +280,58 @@ void synchronize_bank()
   // Now that the sampling is complete, we need to ensure that we have exactly
   // n_particles source sites. The way this is done in a reproducible manner is
   // to adjust only the source sites on the last processor.
-
+  
   if (mpi::rank == mpi::n_procs - 1) {
-    if (finish > settings::n_particles) {
-      // If we have extra sites sampled, we will simply discard the extra
-      // ones on the last processor
-      index_temp = settings::n_particles - start;
-
-    } else if (finish < settings::n_particles) {
-      // If we have too few sites, repeat sites from the very end of the
-      // fission bank
-      sites_needed = settings::n_particles - finish;
-      // TODO: sites_needed > simulation::fission_bank.size() or other test to
-      // make sure we don't need info from other proc
-      for (int i = 0; i < sites_needed; ++i) {
-        int i_bank = simulation::fission_bank.size() - sites_needed + i;
-        temp_sites[index_temp] = simulation::fission_bank[i_bank];
-        if (settings::ifp_on) {
-          copy_ifp_data_from_fission_banks(i_bank,
-            temp_delayed_groups[index_temp], temp_lifetimes[index_temp]);
+    if (active)
+    {
+      if (finish > sites_needed) {
+        // If we have extra sites sampled, we will simply discard the extra
+        // ones on the last processor
+        index_temp = sites_needed - start;
+  
+      } else if (finish < sites_needed) {
+        // If we have too few sites, repeat sites from the very end of the
+        // fission bank
+        int64_t additional_sites_needed = sites_needed - finish;
+        // TODO: sites_needed > simulation::fission_bank.size() or other test to
+        // make sure we don't need info from other proc
+        for (int i = 0; i < additional_sites_needed; ++i) {
+          int i_bank = simulation::fission_bank.size() - sites_needed + i;
+          temp_sites[index_temp] = simulation::fission_bank[i_bank];
+          if (settings::ifp_on) {
+            copy_ifp_data_from_fission_banks(i_bank,
+              temp_delayed_groups[index_temp], temp_lifetimes[index_temp]);
+          }
+          ++index_temp;
         }
-        ++index_temp;
       }
+    } else{
+      if (finish > settings::n_particles) {
+        // If we have extra sites sampled, we will simply discard the extra
+        // ones on the last processor
+        index_temp = settings::n_particles - start;
+
+      } else if (finish < settings::n_particles) {
+        // If we have too few sites, repeat sites from the very end of the
+        // fission bank
+        sites_needed = settings::n_particles - finish;
+        // TODO: sites_needed > simulation::fission_bank.size() or other test to
+        // make sure we don't need info from other proc
+        for (int i = 0; i < sites_needed; ++i) {
+          int i_bank = simulation::fission_bank.size() - sites_needed + i;
+          temp_sites[index_temp] = simulation::fission_bank[i_bank];
+          if (settings::ifp_on) {
+            copy_ifp_data_from_fission_banks(i_bank,
+              temp_delayed_groups[index_temp], temp_lifetimes[index_temp]);
+          }
+          ++index_temp;
+        }
+      }
+
+      // the last processor should not be sending sites to right
+      finish = simulation::work_index[mpi::rank + 1];
     }
-
-    // the last processor should not be sending sites to right
-    finish = simulation::work_index[mpi::rank + 1];
   }
-
   simulation::time_bank_sample.stop();
   simulation::time_bank_sendrecv.start();
 
@@ -277,49 +353,99 @@ void synchronize_bank()
   vector<int> send_delayed_groups;
   vector<double> send_lifetimes;
 
-  if (start < settings::n_particles) {
-    // Determine the index of the processor which has the first part of the
-    // source_bank for the local processor
-    int neighbor = upper_bound_index(
-      simulation::work_index.begin(), simulation::work_index.end(), start);
+  if (active)
+  {
+    if (start < sites_needed) {
+      // Determine the index of the processor which has the first part of the
+      // source_bank for the local processor
+      int neighbor = upper_bound_index(
+        simulation::work_index.begin(), simulation::work_index.end(), start);
 
-    // Resize IFP send buffers
-    if (settings::ifp_on && mpi::n_procs > 1) {
-      resize_ifp_data(send_delayed_groups, send_lifetimes,
-        ifp_n_generation * 3 * simulation::work_per_rank);
-    }
-
-    while (start < finish) {
-      // Determine the number of sites to send
-      int64_t n =
-        std::min(simulation::work_index[neighbor + 1], finish) - start;
-
-      // Initiate an asynchronous send of source sites to the neighboring
-      // process
-      if (neighbor != mpi::rank) {
-        requests.emplace_back();
-        MPI_Isend(&temp_sites[index_local], static_cast<int>(n),
-          mpi::source_site, neighbor, mpi::rank, mpi::intracomm,
-          &requests.back());
-
-        if (settings::ifp_on) {
-          // Send IFP data
-          send_ifp_info(index_local, n, ifp_n_generation, neighbor, requests,
-            temp_delayed_groups, send_delayed_groups, temp_lifetimes,
-            send_lifetimes);
-        }
+      // Resize IFP send buffers
+      if (settings::ifp_on && mpi::n_procs > 1) {
+        resize_ifp_data(send_delayed_groups, send_lifetimes,
+          ifp_n_generation * 3 * simulation::work_per_rank);
       }
 
-      // Increment all indices
-      start += n;
-      index_local += n;
-      ++neighbor;
+      while (start < finish) {
+        // Determine the number of sites to send
+        int64_t n =
+          std::min(simulation::work_index[neighbor + 1], finish) - start;
 
-      // Check for sites out of bounds -- this only happens in the rare
-      // circumstance that a processor close to the end has so many sites that
-      // it would exceed the bank on the last processor
-      if (neighbor > mpi::n_procs - 1)
-        break;
+        // Initiate an asynchronous send of source sites to the neighboring
+        // process
+        if (neighbor != mpi::rank) {
+          requests.emplace_back();
+          MPI_Isend(&temp_sites[index_local], static_cast<int>(n),
+            mpi::source_site, neighbor, mpi::rank, mpi::intracomm,
+            &requests.back());
+
+          if (settings::ifp_on) {
+            // Send IFP data
+            send_ifp_info(index_local, n, ifp_n_generation, neighbor, requests,
+              temp_delayed_groups, send_delayed_groups, temp_lifetimes,
+              send_lifetimes);
+          }
+        }
+
+        // Increment all indices
+        start += n;
+        index_local += n;
+        ++neighbor;
+
+        // Check for sites out of bounds -- this only happens in the rare
+        // circumstance that a processor close to the end has so many sites that
+        // it would exceed the bank on the last processor
+        if (neighbor > mpi::n_procs - 1)
+          break;
+      }
+    }
+  } else 
+  {
+    if (start < settings::n_particles) {
+      // Determine the index of the processor which has the first part of the
+      // source_bank for the local processor
+      int neighbor = upper_bound_index(
+        simulation::work_index.begin(), simulation::work_index.end(), start);
+
+      // Resize IFP send buffers
+      if (settings::ifp_on && mpi::n_procs > 1) {
+        resize_ifp_data(send_delayed_groups, send_lifetimes,
+          ifp_n_generation * 3 * simulation::work_per_rank);
+      }
+
+      while (start < finish) {
+        // Determine the number of sites to send
+        int64_t n =
+          std::min(simulation::work_index[neighbor + 1], finish) - start;
+
+        // Initiate an asynchronous send of source sites to the neighboring
+        // process
+        if (neighbor != mpi::rank) {
+          requests.emplace_back();
+          MPI_Isend(&temp_sites[index_local], static_cast<int>(n),
+            mpi::source_site, neighbor, mpi::rank, mpi::intracomm,
+            &requests.back());
+
+          if (settings::ifp_on) {
+            // Send IFP data
+            send_ifp_info(index_local, n, ifp_n_generation, neighbor, requests,
+              temp_delayed_groups, send_delayed_groups, temp_lifetimes,
+              send_lifetimes);
+          }
+        }
+
+        // Increment all indices
+        start += n;
+        index_local += n;
+        ++neighbor;
+
+        // Check for sites out of bounds -- this only happens in the rare
+        // circumstance that a processor close to the end has so many sites that
+        // it would exceed the bank on the last processor
+        if (neighbor > mpi::n_procs - 1)
+          break;
+      }
     }
   }
 
@@ -443,11 +569,14 @@ void calculate_average_keff()
     n = 0;
   }
 
+  //fmt::print("n value {} = \n", n);
+
   if (n <= 0 || settings::gen_per_batch < settings::new_gen_per_batch) {
     if (settings::gen_per_batch == 1) {
 
       i = simulation::k_generation.size() - 1;
-      simulation::keff = simulation::k_generation[i] * settings::new_gen_per_batch;
+      //fmt::print("keff generation for active batches = {:8.5f}", simulation::k_generation[i]);
+      simulation::keff = simulation::k_generation[i] * settings::gen_per_batch;
 
       } else{
         // For inactive generations, use current generation k as estimate for next
@@ -460,6 +589,7 @@ void calculate_average_keff()
 
     // Determine mean
     simulation::keff = simulation::k_sum[0] / n ;
+    //fmt::print("keff value = {:8.5f}", simulation::keff);
     
     if (n > 1) {
       double t_value;

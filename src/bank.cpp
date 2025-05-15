@@ -27,7 +27,7 @@ SharedArray<SourceSite> surf_source_bank;
 // function.
 SharedArray<SourceSite> fission_bank;
 
-vector<SourceSite> fixed_source_bank;
+SharedArray<SourceSite> initial_fission_bank;
 
 vector<vector<int>> ifp_source_delayed_group_bank;
 
@@ -53,6 +53,7 @@ void free_memory_bank()
   simulation::source_bank.clear();
   simulation::surf_source_bank.clear();
   simulation::fission_bank.clear();
+  simulation::initial_fission_bank.clear();
   simulation::progeny_per_particle.clear();
   simulation::ifp_source_delayed_group_bank.clear();
   simulation::ifp_source_lifetime_bank.clear();
@@ -63,6 +64,7 @@ void free_memory_bank()
 void init_fission_bank(int64_t max)
 {
   simulation::fission_bank.reserve(max);
+  simulation::initial_fission_bank.reserve(max);
   simulation::progeny_per_particle.resize(simulation::work_per_rank);
 }
 

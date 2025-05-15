@@ -22,7 +22,7 @@ extern SharedArray<SourceSite> surf_source_bank;
 
 extern SharedArray<SourceSite> fission_bank;
 
-extern vector<SourceSite> fixed_source_bank;
+extern SharedArray<SourceSite> initial_fission_bank;
 
 extern vector<vector<int>> ifp_source_delayed_group_bank;
 

@@ -48,6 +48,7 @@ extern const RegularMesh* entropy_mesh;
 extern const RegularMesh* ufs_mesh;
 
 extern vector<double> k_generation;
+extern vector<double> k_generation_emc;
 extern vector<int64_t> work_index;
 
 } // namespace simulation
@@ -61,6 +62,9 @@ void allocate_banks();
 
 //! Determine number of particles to transport per process
 void calculate_work();
+
+//! Determine number of particles to transport per process
+void calculate_work_first_active_batch();
 
 //! Initialize nuclear data before a simulation
 void initialize_data();
