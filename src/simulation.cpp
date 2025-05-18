@@ -27,6 +27,7 @@
 #include "openmc/timer.h"
 #include "openmc/track_output.h"
 #include "openmc/weight_windows.h"
+#include "openmc/xsdata.h"
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -408,6 +409,7 @@ void initialize_batch()
     //xt::view(simulation::global_tallies, xt::all()) = 0.0;
     // use the same source bank obtained after the end of inactive cycles for all active cycles
     //randomly_sample_cross_sections();
+    random_sample_xs_data();
   }
   // Add user tallies to active tallies list
   setup_active_tallies();
@@ -768,6 +770,36 @@ void calculate_work_first_active_batch()
     // Set index into source bank for rank i
     i_bank += work_i;
     simulation::work_index[i + 1] = i_bank;
+  }
+}
+
+void random_sample_xs_data ()
+{
+  for (auto& mat: model::materials){
+    for (int i_nuc : mat->nuclide_) {
+      auto& nuc = data::nuclides[i_nuc];
+      std::string nuclide_name = nuc->name_;
+
+      if (settings::random_sample_xs.find(nuclide_name) != settings::random_sample_xs.end()) {
+        
+        const auto& xs_types = settings::random_sample_xs[nuclide_name];
+
+      int XS_TOTAL, XS_ABSORPTION, XS_FISSION, XS_NU_FISSION, XS_PHOTON_PROD;
+      access_xs_types(*nuc, XS_TOTAL, XS_ABSORPTION, XS_FISSION,
+                      XS_NU_FISSION, XS_PHOTON_PROD);
+        uint64_t seed = init_seed(simulation::current_batch, i_nuc);
+
+        for (const auto& xs_type : xs_types) {
+          for (auto& temp_xs : nuc->xs_) {
+            if (xs_type == "nu_fission") {
+              double& nu = temp_xs[XS_NU_FISSION];
+              nu *= 1.0; //+ (prn(&seed) - 0.5)*0.1;
+              fmt::print("new value for nubar {:8.5f}\n", nu);
+            }
+          }
+        }
+      }
+    }
   }
 }
 

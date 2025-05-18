@@ -66,6 +66,8 @@ void calculate_work();
 //! Determine number of particles to transport per process
 void calculate_work_first_active_batch();
 
+void random_sample_xs_data();
+
 //! Initialize nuclear data before a simulation
 void initialize_data();
 

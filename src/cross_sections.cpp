@@ -21,6 +21,7 @@
 #include "openmc/wmp.h"
 #include "openmc/xml_interface.h"
 
+
 #include "pugixml.hpp"
 
 #include <cstdlib> // for getenv
@@ -362,6 +363,8 @@ void access_xs_types(const Nuclide& nuc, int& XS_TOTAL, int& XS_ABSORPTION, int&
   XS_PHOTON_PROD = Nuclide::XS_PHOTON_PROD;
 }
 
+
+
 void randomly_sample_cross_sections()
 {
   // Modify continuous-energy cross sections
@@ -376,33 +379,25 @@ void randomly_sample_cross_sections()
       // Check if this nuclide is specified for random sampling
       if (settings::random_sample_xs.find(nuclide_name) != settings::random_sample_xs.end()) {
 
-        //fmt::print("Modifying cross sections for nuclide: {}\n", nuclide_name);
         const auto& xs_types = settings::random_sample_xs[nuclide_name];
-
-        // Generate a new seed based on the current batch number
         uint64_t seed = init_seed(simulation::current_batch, i_nuc);
 
         // Randomly sample the specified cross sections
         for (const auto& xs_type : xs_types) {
-  
-          if (xs_type == "total") {
-            //int count = 0;
-            // loop for different temperatures
-            for (auto& xs : nuc->xs_) {
-              // loop for different cross section values
-              for (auto& value : xs)
-              {
-                value *= 1.0 + (prn(&seed) - 0.5) * 0.5; // Example perturbation
-                //fmt::print("Perturbed value: {}\n", value);
-                //count++;
-              }
-            }
+          for (auto& xs : nuc->xs_) {
+              if (xs_type == "total") {
+                  for (auto& value : xs)
+                  {
+                    value *= 1.0 + (prn(&seed) - 0.5) * 0.5; 
+                  }
+                }
           } 
         }
       }
     }
   }
 }
+
 
 void library_clear()
 {
