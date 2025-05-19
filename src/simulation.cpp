@@ -408,8 +408,8 @@ void initialize_batch()
     simulation::k_sum[1] = 0.0;
     //xt::view(simulation::global_tallies, xt::all()) = 0.0;
     // use the same source bank obtained after the end of inactive cycles for all active cycles
-    //randomly_sample_cross_sections();
-    random_sample_xs_data();
+    randomly_sample_cross_sections();
+    //random_sample_xs_data();
   }
   // Add user tallies to active tallies list
   setup_active_tallies();
@@ -793,7 +793,7 @@ void random_sample_xs_data ()
           for (auto& temp_xs : nuc->xs_) {
             if (xs_type == "nu_fission") {
               double& nu = temp_xs[XS_NU_FISSION];
-              nu *= 1.0; //+ (prn(&seed) - 0.5)*0.1;
+              nu *= (prn(&seed) - 0.5)*0.1;
               fmt::print("new value for nubar {:8.5f}\n", nu);
             }
           }

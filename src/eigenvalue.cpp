@@ -111,7 +111,7 @@ void calculate_generation_keff()
 void synchronize_bank()
 {
   simulation::time_bank.start();
-  bool is_active = (simulation::current_batch > settings::n_inactive);
+  bool is_active = (simulation::current_batch > settings::n_inactive + 1);
   if (is_active) {
     //fmt::print("Distributing fission bank with initial fission bank...\n");
     // First, allocate the SharedArray to match the std::vector size
