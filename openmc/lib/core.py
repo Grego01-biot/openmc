@@ -78,6 +78,11 @@ _dll.openmc_properties_import.restype = c_int
 _dll.openmc_properties_import.errcheck = _error_handler
 _dll.openmc_run.restype = c_int
 _dll.openmc_run.errcheck = _error_handler
+# Modifications
+_dll.openmc_reload_nuclides.argtypes = [c_char_p]
+_dll.openmc_reload_nuclides.restype = c_int
+_dll.openmc_reload_nuclides.errcheck = _error_handler
+# End of Modifications
 _dll.openmc_reset.restype = c_int
 _dll.openmc_reset.errcheck = _error_handler
 _dll.openmc_reset_timers.restype = c_int
@@ -448,6 +453,10 @@ def plot_geometry(output=True):
     with quiet_dll(output):
         _dll.openmc_plot_geometry()
 
+def reload_nuclides(path:  PathLike):
+    """Clear and re-load all nuclides from the current cross_sections file."""
+    xml_path = c_char_p(str(path).encode())
+    _dll.openmc_reload_nuclides(xml_path)
 
 def reset():
     """Reset tally results"""

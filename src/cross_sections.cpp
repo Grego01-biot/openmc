@@ -28,6 +28,9 @@
 #include <filesystem>
 #include <unordered_set>
 #include <fmt/core.h>
+#include <unordered_map>
+#include <vector>
+#include <memory>
 
 namespace openmc {
 
@@ -39,6 +42,7 @@ namespace data {
 
 std::map<LibraryKey, std::size_t> library_map;
 vector<Library> libraries;
+std::unordered_map<std::string,std::vector<std::unique_ptr<Nuclide>>> sampled_nuclides;
 } // namespace data
 
 //==============================================================================
@@ -183,6 +187,29 @@ void read_cross_sections_xml(pugi::xml_node root)
   }
 }
 
+/*void load_sampled_cross_sections(const auto& nuc_temps)
+{
+  namespace fs = std::filesystem;
+  if (settings::random_sample_directory.empty()) return;
+
+  int stock_idx = data::nuclide_map["U235"];
+
+  for (auto& entry : fs::directory_iterator(settings::random_sample_directory)) {
+    if (entry.path().extension() != ".h5") continue;
+
+    hid_t file_id = file_open(entry.path().string(), 'r');
+    hid_t grp = open_group(file_id, "U235");
+    data::sampled_nuclides["U235"]
+      .push_back(std::make_unique<Nuclide>(grp, nuc_temps[stock_idx]));
+    close_group(grp);
+    file_close(file_id);
+
+    // Immediately restore the mapping
+    data::nuclide_map["U235"] = stock_idx;
+  }
+}*/
+
+
 void read_ce_cross_sections(const vector<vector<double>>& nuc_temps,
   const vector<vector<double>>& thermal_temps)
 {
@@ -198,13 +225,16 @@ void read_ce_cross_sections(const vector<vector<double>>& nuc_temps,
   for (const auto& kv : data::thermal_scatt_map) {
     thermal_names[kv.second] = kv.first;
   }
-
+  
+  //write_message("Inside read continuous cross sections ...", 5);
   // Read cross sections
   for (const auto& mat : model::materials) {
+    //write_message("Material 0 nuclide count = {}\n", mat->nuclide_.size());
     for (int i_nuc : mat->nuclide_) {
       // Find name of corresponding nuclide. Because we haven't actually loaded
       // data, we don't have the name available, so instead we search through
       // all key/value pairs in nuclide_map
+      
       std::string& name = nuclide_names[i_nuc];
 
       // If we've already read this nuclide, skip it
@@ -217,6 +247,7 @@ void read_ce_cross_sections(const vector<vector<double>>& nuc_temps,
         throw std::runtime_error {openmc_err_msg};
 
       already_read.insert(name);
+      
     }
   }
 
@@ -232,7 +263,7 @@ void read_ce_cross_sections(const vector<vector<double>>& nuc_temps,
         int idx = data::library_map[key];
         std::string& filename = data::libraries[idx].path_;
 
-        write_message(6, "Reading {} from {}", name, filename);
+        //write_message(6, "Reading {} from {}", name, filename);
 
         // Open file and make sure version matches
         hid_t file_id = file_open(filename, 'r');
@@ -297,7 +328,7 @@ void read_ce_cross_sections_xml()
                 "It should be set to an XML file.");
   }
 
-  write_message("Reading cross sections XML file...", 5);
+  //write_message("Reading cross sections XML file...", 5);
 
   // Parse cross_sections.xml file
   pugi::xml_document doc;
@@ -320,7 +351,6 @@ void read_ce_cross_sections_xml()
       directory = settings::path_input;
     }
   }
-
   for (const auto& node_library : root.children("library")) {
     data::libraries.emplace_back(node_library, directory);
   }
@@ -338,12 +368,15 @@ void finalize_cross_sections()
     simulation::time_read_xs.start();
     if (settings::run_CE) {
       // Determine desired temperatures for each nuclide and S(a,b) table
+      //fmt::print("nuclide_map size {} \n", data::nuclide_map.size());
+      //fmt::print("thermal scatt map size {} \n", data::thermal_scatt_map.size());
       double_2dvec nuc_temps(data::nuclide_map.size());
       double_2dvec thermal_temps(data::thermal_scatt_map.size());
       get_temperatures(nuc_temps, thermal_temps);
 
       // Read continuous-energy cross sections from HDF5
       read_ce_cross_sections(nuc_temps, thermal_temps);
+
     } else {
       // Create material macroscopic data for MGXS
       set_mg_interface_nuclides_and_temps();

@@ -43,6 +43,7 @@
 #include <algorithm>
 #include <cmath>
 #include <string>
+#include <utility>
 
 //==============================================================================
 // C API functions
@@ -406,9 +407,8 @@ void initialize_batch()
     simulation::k_generation.clear();
     simulation::k_sum[0] = 0.0;
     simulation::k_sum[1] = 0.0;
-    //xt::view(simulation::global_tallies, xt::all()) = 0.0;
-    // use the same source bank obtained after the end of inactive cycles for all active cycles
-    randomly_sample_cross_sections();
+    
+    //randomly_sample_cross_sections();
     //random_sample_xs_data();
   }
   // Add user tallies to active tallies list
@@ -994,6 +994,32 @@ void transport_event_based()
     remaining_work -= n_particles;
     source_offset += n_particles;
   }
+}
+
+extern "C" int openmc_reload_nuclides(const char* sample_xs_xml)
+{
+  if (settings::EMC) {
+    
+    settings::path_cross_sections = sample_xs_xml;
+    library_clear();
+    data::elements.clear();
+    nuclides_clear();
+    free_memory_material();
+    
+    //write_message("Number of nuclides before loading: {}", data::nuclides.size());
+    read_cross_sections_xml();
+    read_materials_xml();
+    finalize_cross_sections();
+
+    for (auto& mat : model::materials) {
+      mat->mat_nuclide_index_.clear();
+      mat->init_nuclide_index();
+    }
+    // Now rebuild the global energy grids & interpolation tables
+    initialize_data();
+  }
+
+  return 0;
 }
 
 } // namespace openmc

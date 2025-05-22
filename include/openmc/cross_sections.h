@@ -5,8 +5,11 @@
 
 #include <map>
 #include <string>
+#include <unordered_map>
+#include <memory>
 
 #include "openmc/vector.h"
+#include "openmc/nuclide.h"
 
 namespace openmc {
 
@@ -52,6 +55,8 @@ extern std::map<LibraryKey, std::size_t> library_map;
 //!< Data libraries
 extern vector<Library> libraries;
 
+extern std::unordered_map<std::string, std::vector<std::unique_ptr<Nuclide>>> sampled_nuclides;
+
 } // namespace data
 
 //==============================================================================
@@ -72,6 +77,8 @@ void read_cross_sections_xml(pugi::xml_node root);
 //! \param[in] nuc_temps Temperatures for each nuclide in [K]
 //! \param[in] thermal_temps Temperatures for each thermal scattering table in
 //! [K]
+//void load_sampled_cross_sections(const auto& nuc_temps);
+
 void read_ce_cross_sections(const vector<vector<double>>& nuc_temps,
   const vector<vector<double>>& thermal_temps);
 

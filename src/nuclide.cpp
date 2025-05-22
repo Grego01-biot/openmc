@@ -14,6 +14,7 @@
 #include "openmc/simulation.h"
 #include "openmc/string_utils.h"
 #include "openmc/thermal.h"
+#include "openmc/message_passing.h"
 
 #include <fmt/core.h>
 
@@ -50,7 +51,8 @@ int Nuclide::XS_NU_FISSION {3};
 int Nuclide::XS_PHOTON_PROD {4};
 
 Nuclide::Nuclide(hid_t group, const vector<double>& temperature)
-{
+{ 
+  
   // Set index of nuclide in global vector
   index_ = data::nuclides.size();
 
@@ -80,6 +82,7 @@ Nuclide::Nuclide(hid_t group, const vector<double>& temperature)
     return;
   }
 
+  
   // Determine temperatures available
   hid_t kT_group = open_group(group, "kTs");
   auto dset_names = dataset_names(kT_group);
@@ -244,6 +247,7 @@ Nuclide::Nuclide(hid_t group, const vector<double>& temperature)
   close_group(energy_group);
 
   // Read reactions
+  
   hid_t rxs_group = open_group(group, "reactions");
   for (auto name : group_names(rxs_group)) {
     if (starts_with(name, "reaction_")) {
@@ -327,9 +331,23 @@ Nuclide::Nuclide(hid_t group, const vector<double>& temperature)
     // Read total nu data
     hid_t nu_group = open_group(group, "total_nu");
     total_nu_ = read_function(nu_group, "yield");
+    //fmt::print("We are reading total_nu_ \n");
     close_group(nu_group);
   }
-
+  /*if (name_ == "U235" && total_nu_) {
+    // Print a header at verbosity level 0
+    fmt::print(0, ">>> Loaded total neutron yield for U235: \n");
+    // Attempt to pull out the underlying Tabulated1D
+    if (auto* tab = dynamic_cast<Tabulated1D*>(total_nu_.get())) {
+      const auto& E = tab->x();
+      const auto& v = tab->y();
+      for (size_t i = 0; i < E.size(); ++i) {
+        fmt::print(0, "    E = {:e} eV -> ν = {:e} \n", E[i], v[i]);
+      }
+    } else {
+      fmt::print(0, "    [warning] total_nu_ is not a Tabulated1D. \n");
+    }
+  }*/
   // Read fission energy release data if present
   if (object_exists(group, "fission_energy_release")) {
     hid_t fer_group = open_group(group, "fission_energy_release");
@@ -540,7 +558,7 @@ double Nuclide::nu(double E, EmissionMode mode, int group) const
   switch (mode) {
   case EmissionMode::prompt:
     return (*fission_rx_[0]->products_[0].yield_)(E);
-  case EmissionMode::delayed:
+  case EmissionMode::delayed: 
     if (n_precursor_ > 0 && settings::create_delayed_neutrons) {
       auto rx = fission_rx_[0];
       if (group >= 1 && group < rx->products_.size()) {
@@ -565,7 +583,7 @@ double Nuclide::nu(double E, EmissionMode mode, int group) const
     } else {
       return 0.0;
     }
-  case EmissionMode::total:
+  case EmissionMode::total: 
     if (total_nu_ && settings::create_delayed_neutrons) {
       return (*total_nu_)(E);
     } else {
@@ -1131,6 +1149,7 @@ extern "C" int openmc_load_nuclide(const char* name, const double* temps, int n)
     hid_t file_id = file_open(filename, 'r');
     check_data_version(file_id);
 
+    //write_message(6, "Reading the nuclide data from {}", filename);
     // Read nuclide data from HDF5
     hid_t group = open_group(file_id, name);
     vector<double> temperature {temps, temps + n};
@@ -1160,7 +1179,7 @@ extern "C" int openmc_load_nuclide(const char* name, const double* temps, int n)
 
         int idx = it->second;
         const auto& filename = data::libraries[idx].path_;
-        write_message(6, "Reading {} from {} ", element, filename);
+        //write_message(6, "Reading {} from {} ", element, filename);
 
         // Open file and make sure version is sufficient
         hid_t file_id = file_open(filename, 'r');
@@ -1200,6 +1219,28 @@ extern "C" int openmc_nuclide_name(int index, const char** name)
     return OPENMC_E_OUT_OF_BOUNDS;
   }
 }
+
+extern "C" int openmc_load_nuclide_path(const char* name,
+                                         const char* path,
+                                         int path_len)
+ {
+   // 1. Find which library index holds that nuclide
+   LibraryKey key{Library::Type::neutron, name};
+   auto it = data::library_map.find(key);
+   if (it == data::library_map.end()) {
+     set_errmsg("Nuclide '" + std::string{name} +
+                "' is not present in library.");
+     return OPENMC_E_DATA;
+   }
+   int idx = it->second;
+
+   // 2. Replace its path_ string with our new file
+   data::libraries[idx].path_ =
+     std::string(path, static_cast<size_t>(path_len));
+
+   // 3. Now call the existing loader with no temperatures (n=0)
+   return openmc_load_nuclide(name, nullptr, 0);
+ }
 
 extern "C" int openmc_nuclide_collapse_rate(int index, int MT,
   double temperature, const double* energy, const double* flux, int n,

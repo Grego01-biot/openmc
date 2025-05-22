@@ -533,14 +533,19 @@ double EMC_keff_uncertainty()
 
   for (int j = 0 ; j < random_samples ; ++j) {
     mean_keff += simulation::k_generation_emc[j]*settings::gen_per_batch/(n_active_batches);
+    fmt::print("k_generation {:.5f}\n", simulation::k_generation_emc[j]);
   }
   // Compute the variance
   double variance = (1.0/(n_active_batches - 1)) * ( (simulation::keff_first_batch - mean_keff) * (simulation::keff_first_batch - mean_keff));
+  double std_dev = 0.0;
   
   for (int i = 0 ; i < random_samples; ++i) {
     variance += (1.0/(n_active_batches - 1))*( (simulation::k_generation_emc[i] - mean_keff) * (simulation::k_generation_emc[i] - mean_keff) ) ;
+    fmt::print("variance {:.5f} \n", variance );
   }
-
+  std_dev = pow(variance, 0.5);
+  fmt::print("standard deviation {:.5f} \n", std_dev);
+  variance = std_dev;
   return variance;
 }
 
@@ -591,11 +596,12 @@ void print_results()
           fmt::print(" Statistical uncertainty     = {:.5f}\n",
             simulation::keff_std);
           double total_uncertainty = EMC_keff_uncertainty();
+          double statistical_uncertainty = simulation::keff_std; // *simulation::keff_std
           fmt::print(" Total uncertainty           = {:.5f}\n",
             total_uncertainty);
-          if (total_uncertainty > simulation::keff_std) {
+          if (total_uncertainty > statistical_uncertainty) {
             fmt::print(" Nuclear data uncertainty    = {:.5f}\n",
-              total_uncertainty - simulation::keff_std);
+              total_uncertainty - statistical_uncertainty);
           } else {
             warning("The statistical uncertainty is larger than the total uncertainty." 
                     "Need to simulate more particles to reduce the statistical uncertainty.");

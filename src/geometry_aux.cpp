@@ -214,7 +214,7 @@ void get_temperatures(
     // Skip non-material cells.
     if (cell->fill_ != C_NONE)
       continue;
-
+    
     for (int j = 0; j < cell->material_.size(); ++j) {
       // Skip void materials
       int i_material = cell->material_[j];
@@ -233,16 +233,19 @@ void get_temperatures(
         for (double sqrtkT : cell->sqrtkT_)
           cell_temps.push_back(sqrtkT * sqrtkT / K_BOLTZMANN);
       }
-
+     
       const auto& mat {model::materials[i_material]};
+      //write_message(fmt::format("Material {} has {} nuclides", i_material, mat->nuclide_.size()), 1);
       for (const auto& i_nuc : mat->nuclide_) {
+        //write_message(fmt::format("Warning: Adding new nuclide {}", i_nuc), 1);
         for (double temperature : cell_temps) {
+          //write_message(fmt::format("Warning: Adding new nuclide temperature size {:.5f}", temperature), 1);
           // Add temperature if it hasn't already been added
           if (!contains(nuc_temps[i_nuc], temperature))
             nuc_temps[i_nuc].push_back(temperature);
         }
       }
-
+      //write_message("Nuc temperature is filled", 5);
       for (const auto& table : mat->thermal_tables_) {
         // Get index in data::thermal_scatt array
         int i_sab = table.index_table;
@@ -320,7 +323,7 @@ int32_t find_root_universe()
 
 void prepare_distribcell(const std::vector<int32_t>* user_distribcells)
 {
-  write_message("Preparing distributed cell instances...", 5);
+  //write_message("Preparing distributed cell instances...", 5);
 
   std::unordered_set<int32_t> distribcells;
 

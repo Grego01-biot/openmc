@@ -11,7 +11,7 @@ from .core import _FortranObject
 from .error import _error_handler
 
 
-__all__ = ['Nuclide', 'nuclides', 'load_nuclide']
+__all__ = ['Nuclide', 'nuclides', 'load_nuclide', 'load_nuclide_path']
 
 _array_1d_dble = ndpointer(dtype=np.double, ndim=1, flags='CONTIGUOUS')
 
@@ -22,6 +22,9 @@ _dll.openmc_get_nuclide_index.errcheck = _error_handler
 _dll.openmc_load_nuclide.argtypes = [c_char_p, POINTER(c_double), c_int]
 _dll.openmc_load_nuclide.restype = c_int
 _dll.openmc_load_nuclide.errcheck = _error_handler
+_dll.openmc_load_nuclide_path.argtypes = [c_char_p, c_char_p, c_int]
+_dll.openmc_load_nuclide_path.restype  = c_int
+_dll.openmc_load_nuclide_path.errcheck = _error_handler
 _dll.openmc_nuclide_name.argtypes = [c_int, POINTER(c_char_p)]
 _dll.openmc_nuclide_name.restype = c_int
 _dll.openmc_nuclide_name.errcheck = _error_handler
@@ -31,6 +34,12 @@ _dll.openmc_nuclide_collapse_rate.restype = c_int
 _dll.openmc_nuclide_collapse_rate.errcheck = _error_handler
 _dll.nuclides_size.restype = c_size_t
 
+
+def load_nuclide_path(name: str, path: str):
+     """Load cross section data for a nuclide from a *specific* XML/HDF5 file."""
+     name_b = name.encode()
+     path_b = path.encode()
+     _dll.openmc_load_nuclide_path(name_b, path_b, len(path_b))
 
 def load_nuclide(name):
     """Load cross section data for a nuclide.
@@ -42,7 +51,7 @@ def load_nuclide(name):
 
     """
     _dll.openmc_load_nuclide(name.encode(), None, 0)
-
+    
 
 class Nuclide(_FortranObject):
     """Nuclide stored internally.

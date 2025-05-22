@@ -81,6 +81,7 @@ bool openmc_is_statepoint_batch();
 int openmc_legendre_filter_get_order(int32_t index, int* order);
 int openmc_legendre_filter_set_order(int32_t index, int order);
 int openmc_load_nuclide(const char* name, const double* temps, int n);
+int openmc_load_nuclide_path(const char* name, const char* path, int path_len);
 int openmc_material_add_nuclide(
   int32_t index, const char name[], double density);
 int openmc_material_get_densities(
@@ -132,6 +133,7 @@ int openmc_regular_mesh_get_params(
 int openmc_regular_mesh_set_dimension(int32_t index, int n, const int* dims);
 int openmc_regular_mesh_set_params(int32_t index, int n, const double* ll,
   const double* ur, const double* width);
+int openmc_reload_nuclides(const char* sample_xs_xml);
 int openmc_remove_tally(int32_t index);
 int openmc_reset();
 int openmc_reset_timers();

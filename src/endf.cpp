@@ -90,9 +90,31 @@ bool is_inelastic_scatter(int mt)
 
 unique_ptr<Function1D> read_function(hid_t group, const char* name)
 {
+  //static int i = 0;
+
   hid_t obj_id = open_object(group, name);
   std::string func_type;
   read_attribute(obj_id, "type", func_type);
+  
+  if (func_type == "Tabulated1D" && std::string{name} == "yield") {
+    // Read the 2×N array: row 0 = energies, row 1 = yields
+    xt::xarray<double> arr;
+    read_dataset(obj_id, arr);
+
+    // Pull out the two rows
+    auto E = xt::view(arr, 0);
+    auto y = xt::view(arr, 1);
+    // Print to the OpenMC log at level 0 (always shown)
+    /*write_message("Iteration {} (only printing yields on #5)…", i);
+    if (i == 4) {
+      write_message("RAW fission yield loaded from {}:", name);
+      for (std::size_t i = 0; i < E.size(); ++i) {
+        write_message(" E = {:e} eV -> yield = {:e}", E[i], y[i]);
+      }
+    }
+    ++i;*/
+  }
+
   unique_ptr<Function1D> func;
   if (func_type == "Tabulated1D") {
     func = make_unique<Tabulated1D>(obj_id);
