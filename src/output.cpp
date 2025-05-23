@@ -533,7 +533,7 @@ double EMC_keff_uncertainty()
 
   for (int j = 0 ; j < random_samples ; ++j) {
     mean_keff += simulation::k_generation_emc[j]*settings::gen_per_batch/(n_active_batches);
-    fmt::print("k_generation {:.5f}\n", simulation::k_generation_emc[j]);
+    //fmt::print("k_generation {:.5f}\n", simulation::k_generation_emc[j]);
   }
   // Compute the variance
   double variance = (1.0/(n_active_batches - 1)) * ( (simulation::keff_first_batch - mean_keff) * (simulation::keff_first_batch - mean_keff));
@@ -541,10 +541,10 @@ double EMC_keff_uncertainty()
   
   for (int i = 0 ; i < random_samples; ++i) {
     variance += (1.0/(n_active_batches - 1))*( (simulation::k_generation_emc[i] - mean_keff) * (simulation::k_generation_emc[i] - mean_keff) ) ;
-    fmt::print("variance {:.5f} \n", variance );
+    //fmt::print("variance {:.5f} \n", variance );
   }
   std_dev = pow(variance, 0.5);
-  fmt::print("standard deviation {:.5f} \n", std_dev);
+  //fmt::print("standard deviation {:.5f} \n", std_dev);
   variance = std_dev;
   return variance;
 }

@@ -874,6 +874,12 @@ void write_eigenvalue_hdf5(hid_t group)
   if (settings::entropy_on) {
     write_dataset(group, "entropy", simulation::entropy);
   }
+  if (settings::EMC)
+  {
+    write_dataset(group, "k_generation_emc", simulation::k_generation_emc);
+    write_dataset(group, "keff_first_batch", simulation::keff_first_batch);
+    write_dataset(group, "keff_first_batch_std", simulation::keff_std);
+  }
   write_dataset(group, "k_col_abs", simulation::k_col_abs);
   write_dataset(group, "k_col_tra", simulation::k_col_tra);
   write_dataset(group, "k_abs_tra", simulation::k_abs_tra);

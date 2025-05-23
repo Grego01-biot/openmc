@@ -74,6 +74,8 @@ class StatePoint:
         Cross-product of absorption and tracklength estimates of k-effective
     k_generation : numpy.ndarray
         Estimate of k-effective for each batch/generation
+    k_generation_emc : numpy.ndarray
+        Estimate of k-effective for each active batch without statistical uncertainty
     keff : uncertainties.UFloat
         Combined estimator for k-effective
 
@@ -269,11 +271,32 @@ class StatePoint:
             return None
 
     @property
+    def k_generation_emc(self):
+        if self.run_mode == 'eigenvalue':
+            return self._f['k_generation_emc'][()]
+        else:
+            return None
+        
+    @property
     def keff(self):
         if self.run_mode == 'eigenvalue':
             return ufloat(*self._f['k_combined'][()])
         else:
             return None
+
+    @property
+    def keff_first_batch(self):
+        """keff of the first active batch."""
+        if self.run_mode == 'eigenvalue':
+            return float(self._f['keff_first_batch'][()])
+        return None
+
+    @property
+    def keff_first_batch_std(self):
+        """Standard deviation of the combined k-effective estimator."""
+        if self.run_mode == 'eigenvalue':
+            return float(self._f['keff_first_batch_std'][()])
+        return None
 
     @property
     def k_combined(self):

@@ -398,8 +398,7 @@ class Settings:
         self._tabular_legendre = {}
 
         self._temperature = {}
-        self._random_sample_xs = {}
-
+    
         # Cutoff subelement
         self._cutoff = None
 
@@ -429,6 +428,7 @@ class Settings:
         self._max_tracks = None
         self._use_decay_photons = None
         self._EMC = None
+        self._random_sample_xs = {}
 
         self._random_ray = {}
 
