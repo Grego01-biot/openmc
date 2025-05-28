@@ -244,7 +244,6 @@ int openmc_next_batch(int* status)
 
   initialize_batch();
   //fmt::print("Simulating batch {:<4} (active)\n", simulation::current_batch);
-
   // =======================================================================
   // LOOP OVER GENERATIONS
   for (current_gen = 1; current_gen <= settings::gen_per_batch; ++current_gen) {

@@ -194,6 +194,7 @@ Material::Material(pugi::xml_node node)
 
         // Copy atom/weight percents
         if (has_ao) {
+          //fmt::print("density of material {:.5f} \n", std::stod(get_node_value(node_nuc, "ao")));
           densities.push_back(std::stod(get_node_value(node_nuc, "ao")));
         } else {
           densities.push_back(-std::stod(get_node_value(node_nuc, "wo")));

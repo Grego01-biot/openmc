@@ -95,7 +95,7 @@ void calculate_generation_keff()
   if (simulation::current_batch > settings::n_inactive + 1)
   { 
     simulation::k_generation_emc.push_back(keff_reduced);
-    fmt::print("keff generation {:.5f}\n", keff_reduced);
+    //fmt::print("keff generation {:.5f}\n", keff_reduced);
     //simulation::k_generation.push_back(keff_reduced);
   } 
   else {
