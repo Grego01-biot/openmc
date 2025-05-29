@@ -83,7 +83,7 @@ void calculate_generation_keff()
   // TODO: This should be normalized by total_weight, not by n_particles
   bool first_active = ( simulation::current_batch == settings::n_inactive + 1);
   if (settings::solver_type != SolverType::RANDOM_RAY) {
-    if (first_active)
+    if (first_active && settings::EMC)
     {
       keff_reduced /= (settings::n_particles / settings::gen_per_batch);
     }
@@ -92,7 +92,7 @@ void calculate_generation_keff()
       keff_reduced /= settings::n_particles;
     }
   }
-  if (simulation::current_batch > settings::n_inactive + 1)
+  if (settings::EMC && simulation::current_batch > settings::n_inactive + 1)
   { 
     simulation::k_generation_emc.push_back(keff_reduced);
     //fmt::print("keff generation {:.5f}\n", keff_reduced);
@@ -111,20 +111,22 @@ void calculate_generation_keff()
 void synchronize_bank()
 {
   simulation::time_bank.start();
-  bool is_active = (simulation::current_batch > settings::n_inactive + 1);
-  if (is_active) {
-    //fmt::print("Distributing fission bank with initial fission bank...\n");
-    // First, allocate the SharedArray to match the std::vector size
-    simulation::fission_bank.resize(simulation::initial_fission_bank.size());
-    for (std::size_t i = 0; i < simulation::initial_fission_bank.size(); ++i) {
-      simulation::fission_bank[i] = simulation::initial_fission_bank[i];
-    }
-  }
   bool active = (simulation::current_batch == settings::n_inactive + 1);
-  if (active)
-  {
-    int64_t new_size = 3 * settings::n_particles / settings::gen_per_batch;
-    simulation::fission_bank.resize(new_size);
+  if (settings::EMC){
+    bool is_active = (simulation::current_batch > settings::n_inactive + 1);
+    if (is_active) {
+      //fmt::print("Distributing fission bank with initial fission bank...\n");
+      // First, allocate the SharedArray to match the std::vector size
+      simulation::fission_bank.resize(simulation::initial_fission_bank.size());
+      for (std::size_t i = 0; i < simulation::initial_fission_bank.size(); ++i) {
+        simulation::fission_bank[i] = simulation::initial_fission_bank[i];
+      }
+    }
+    if (active)
+    {
+      int64_t new_size = 3 * settings::n_particles / settings::gen_per_batch;
+      simulation::fission_bank.resize(new_size);
+    }
   }
   //fmt::print("Fission bank size = {}\n", simulation::fission_bank.size());
   //fmt::print("Number of particles per gen per batch", simulation::work_per_rank);
@@ -180,16 +182,17 @@ void synchronize_bank()
   // and the probability for selecting a site.
   
   int64_t sites_needed;
-  //fmt::print("finish value = {}\n", finish);
-  //fmt::print("total value = {}\n ", total);
   
-  if (active) {
+  if (active && settings::EMC) {
+
     sites_needed = settings::n_particles / settings::gen_per_batch;
-    //fmt::print("First active batch: sites needed = {}\n", sites_needed);
+
   } else if (total < settings::n_particles) {
+
     sites_needed = settings::n_particles % total;
   }
   else {
+
     sites_needed = settings::n_particles;
   }
   double p_sample = static_cast<double>(sites_needed) / total;
@@ -220,7 +223,7 @@ void synchronize_bank()
     // int(n_particles/total) sites to temp_sites. For example, if you need
     // 1000 and 300 were banked, this would add 3 source sites per banked site
     // and the remaining 100 would be randomly sampled.
-    if (active)
+    if (active && settings::EMC)
     { if (total < sites_needed)
       {
         for (int64_t j = 1; j <= sites_needed ; ++j) {
@@ -353,7 +356,7 @@ void synchronize_bank()
   vector<int> send_delayed_groups;
   vector<double> send_lifetimes;
 
-  if (active)
+  if (active && settings::EMC)
   {
     if (start < sites_needed) {
       // Determine the index of the processor which has the first part of the
@@ -552,7 +555,7 @@ void calculate_average_keff()
   int i = overall_generation() - 1;
   int n;
   if (simulation::current_batch > settings::n_inactive) {
-    if (settings::EMC == true)
+    if (settings::EMC)
     {
       if (settings::new_gen_per_batch > settings::gen_per_batch) {
         n = (settings::gen_per_batch * simulation::n_realizations) + (settings::new_gen_per_batch - settings::gen_per_batch) +
@@ -572,7 +575,7 @@ void calculate_average_keff()
   //fmt::print("n value {} = \n", n);
 
   if (n <= 0 || settings::gen_per_batch < settings::new_gen_per_batch) {
-    if (settings::gen_per_batch == 1) {
+    if (settings::gen_per_batch == 1 && settings::EMC) {
 
       i = simulation::k_generation.size() - 1;
       //fmt::print("keff generation for active batches = {:8.5f}", simulation::k_generation[i]);

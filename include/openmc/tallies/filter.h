@@ -18,6 +18,7 @@ namespace openmc {
 
 enum class FilterType {
   AZIMUTHAL,
+  BATCH,
   CELLBORN,
   CELLFROM,
   CELL,
