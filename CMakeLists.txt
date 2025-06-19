@@ -400,6 +400,7 @@ list(APPEND libopenmc_SOURCES
   src/tallies/derivative.cpp
   src/tallies/filter.cpp
   src/tallies/filter_azimuthal.cpp
+  src/tallies/filter_batch.cpp
   src/tallies/filter_cell.cpp
   src/tallies/filter_cell_instance.cpp
   src/tallies/filter_cellborn.cpp

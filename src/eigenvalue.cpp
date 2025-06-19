@@ -53,8 +53,8 @@ void calculate_generation_keff()
 
   // Get keff for this generation by subtracting off the starting value
   simulation::keff_generation =
-    gt(GlobalTally::K_TRACKLENGTH, TallyResult::VALUE) 
-     - simulation::keff_generation;
+    gt(GlobalTally::K_TRACKLENGTH, TallyResult::VALUE) -
+    simulation::keff_generation;
 
   double keff_reduced;
 #ifdef OPENMC_MPI
@@ -69,13 +69,11 @@ void calculate_generation_keff()
     // independently compute the same value of k. Thus, there is no need to
     // perform any additional MPI reduction here.
     keff_reduced = simulation::keff_generation;
-    
   }
 #else
   keff_reduced = simulation::keff_generation;
 #endif
 
-  //fmt::print("keff_reduced = {}\n", keff_reduced);
   // Normalize single batch estimate of k
   // TODO: This should be normalized by total_weight, not by n_particles
   if (settings::solver_type != SolverType::RANDOM_RAY) {
@@ -83,12 +81,6 @@ void calculate_generation_keff()
   }
 
   simulation::k_generation.push_back(keff_reduced);
-  
-  int index = simulation::k_generation.size() - 1;
-
-  // Print it
-  //fmt::print("keff_reduced inserted at index [{}]: {:.5f}\n", index, keff_reduced);
-  
 }
 
 void synchronize_bank()
@@ -426,41 +418,24 @@ void calculate_average_keff()
   int i = overall_generation() - 1;
   int n;
   if (simulation::current_batch > settings::n_inactive) {
-    if (settings::EMC == true)
-    {
-      if (settings::new_gen_per_batch > settings::gen_per_batch) {
-        n = (settings::gen_per_batch * simulation::n_realizations) + (settings::new_gen_per_batch - settings::gen_per_batch) +
-            simulation::current_gen;
-      } else {
-        n = settings::new_gen_per_batch * simulation::n_realizations +
-            simulation::current_gen;
-      }
-    } else{
-      n = settings::gen_per_batch * simulation::n_realizations +
-      simulation::current_gen;
-    }
+    n = settings::gen_per_batch * simulation::n_realizations +
+        simulation::current_gen;
   } else {
     n = 0;
   }
 
-  if (n <= 0 || settings::gen_per_batch < settings::new_gen_per_batch) {
-    if (settings::gen_per_batch == 1) {
-
-      i = simulation::k_generation.size() - 1;
-      simulation::keff = simulation::k_generation[i] * settings::new_gen_per_batch;
-
-      } else{
-        // For inactive generations, use current generation k as estimate for next
-        simulation::keff = simulation::k_generation[i];
-      }
+  if (n <= 0) {
+    // For inactive generations, use current generation k as estimate for next
+    // generation
+    simulation::keff = simulation::k_generation[i];
   } else {
     // Sample mean of keff
     simulation::k_sum[0] += simulation::k_generation[i];
     simulation::k_sum[1] += std::pow(simulation::k_generation[i], 2);
 
     // Determine mean
-    simulation::keff = simulation::k_sum[0] / n ;
-    
+    simulation::keff = simulation::k_sum[0] / n;
+
     if (n > 1) {
       double t_value;
       if (settings::confidence_intervals) {
@@ -471,12 +446,11 @@ void calculate_average_keff()
         t_value = 1.0;
       }
 
-      // Standard deviation of the sample mean of k using batch statistics
+      // Standard deviation of the sample mean of k
       simulation::keff_std =
         t_value *
         std::sqrt(
           (simulation::k_sum[1] / n - std::pow(simulation::keff, 2)) / (n - 1));
-      
     }
   }
 }
@@ -495,12 +469,6 @@ int openmc_get_keff(double* k_combined)
     if (simulation::n_realizations <= 1) {
       k_combined[1] = std::numeric_limits<double>::infinity();
     }
-    return 0;
-  }
-
-  if (simulation::n_realizations == 1 && settings::EMC == true) {
-    k_combined[0] = simulation::keff;
-    k_combined[1] = simulation::keff_std;
     return 0;
   }
 

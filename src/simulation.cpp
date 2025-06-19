@@ -337,15 +337,9 @@ void allocate_banks()
 {
   if (settings::run_mode == RunMode::EIGENVALUE &&
       settings::solver_type == SolverType::MONTE_CARLO) {
+    // Allocate source bank
+    simulation::source_bank.resize(simulation::work_per_rank);
 
-    if (settings::EMC && simulation::current_batch == settings::n_inactive + 1) {
-      // First active batch: store full 10 generations
-      int64_t total_source_particles = settings::gen_per_batch * settings::n_particles;
-      simulation::source_bank.resize(total_source_particles);
-      simulation::fixed_source_bank.resize(total_source_particles);
-    } else {
-      simulation::source_bank.resize(simulation::work_per_rank);
-    }
     // Allocate fission bank
     init_fission_bank(3 * simulation::work_per_rank);
 
@@ -402,62 +396,16 @@ void initialize_batch()
       t->active_ = true;
     }
   }
-  if (settings::EMC && simulation::current_batch > settings::n_inactive + 1) {
-    calculate_work();
-   
-    fmt::print("Fixed source size: {}\n", simulation::fixed_source_bank.size());
-    simulation::source_bank.resize(simulation::fixed_source_bank.size());
-    std::copy(
-      simulation::fixed_source_bank.begin(),
-      simulation::fixed_source_bank.end(),
-      simulation::source_bank.begin());
-    randomly_sample_cross_sections();
-  }
   // Add user tallies to active tallies list
   setup_active_tallies();
 }
 
 void finalize_batch()
 {
-  if (!settings::EMC){
-    simulation::time_tallies.start();
-    accumulate_tallies();
-    simulation::time_tallies.stop();
-  } else {
-    bool first_active = false;
-    if (!settings::restart_run) {
-      first_active = simulation::current_batch == settings::n_inactive + 1;
-    } else if (simulation::current_batch == simulation::restart_batch + 1) {
-      first_active = !(simulation::restart_batch < settings::n_inactive);
-    }
-    // Reduce tallies onto master process and accumulate
-    if ((first_active) && (simulation::current_batch > settings::n_inactive)){
-      // We accumulate normal tallies if we are in the first batch to compute the statistical uncertainty (sum and sum_sq)
-      simulation::time_tallies.start();
-      accumulate_tallies();
-      compute_statistical_uncertainty();
-      simulation::time_tallies.stop();
-
-      // Update gen_per_batch after the first active batch and the numer of particles after the first batch
-
-      settings::new_gen_per_batch = settings::gen_per_batch;
-      settings::gen_per_batch = 1;
-      settings::n_particles = settings::n_particles * settings::new_gen_per_batch;
-
-    /*if (simulation::current_batch == settings::n_inactive + 1 ) {
-      fmt::print("Current batch: {}\n", simulation::current_batch);
-      fmt::print("Number of particles: {}\n", settings::n_particles);
-      fmt::print("Size of inactive source bank: {}\n", simulation:: source_bank.size());
-      simulation::fixed_source_bank = simulation::source_bank;  // Deep copy
-    }*/
-
-    } else {
-      // We accumulate only the sum of contributions for each random sample to compute the total uncertainty
-      simulation::time_tallies.start();
-      accumulate_EMC_tallies();
-      simulation::time_tallies.stop();
-    }
-  }
+  // Reduce tallies onto master process and accumulate
+  simulation::time_tallies.start();
+  accumulate_tallies();
+  simulation::time_tallies.stop();
 
   // update weight windows if needed
   for (const auto& wwg : variance_reduction::weight_windows_generators) {
@@ -562,10 +510,6 @@ void initialize_generation()
     if (settings::ufs_on)
       ufs_count_sites();
 
-    if (settings::EMC && simulation::current_batch > settings::n_inactive + 1) {
-      xt::view(simulation::global_tallies, xt::all()) = 0.0;
-      simulation::keff_generation = 0.0;
-    }
     // Store current value of tracklength k
     simulation::keff_generation = simulation::global_tallies(
       GlobalTally::K_TRACKLENGTH, TallyResult::VALUE);
@@ -599,21 +543,10 @@ void finalize_generation()
     // If using shared memory, stable sort the fission bank (by parent IDs)
     // so as to allow for reproducibility regardless of which order particles
     // are run in.
-
-    if (settings::EMC && simulation::current_batch < settings::n_inactive + 1) {
     sort_fission_bank();
+
     // Distribute fission bank across processors evenly
     synchronize_bank();
-    }
-    if (settings::EMC && simulation::current_batch == settings::n_inactive + 1)
-    {
-      int gen_idx = simulation::current_gen - 1;
-      int offset = gen_idx * settings::n_particles;
-      std::copy(
-        simulation::source_bank.begin(),
-        simulation::source_bank.end(),
-        simulation::fixed_source_bank.begin() + offset);
-    }  
   }
 
   if (settings::run_mode == RunMode::EIGENVALUE) {
@@ -625,7 +558,6 @@ void finalize_generation()
 
     // Collect results and statistics
     calculate_generation_keff();
-
     calculate_average_keff();
 
     // Write generation output
@@ -969,6 +901,32 @@ void transport_event_based()
     remaining_work -= n_particles;
     source_offset += n_particles;
   }
+}
+
+extern "C" int openmc_reload_nuclides(const char* sample_xs_xml)
+{
+  if (settings::EMC) {
+    
+    settings::path_cross_sections = sample_xs_xml;
+    library_clear();
+    data::elements.clear();
+    nuclides_clear();
+    free_memory_material();
+    
+    //write_message("Number of nuclides before loading: {}", data::nuclides.size());
+    read_cross_sections_xml();
+    read_materials_xml();
+    finalize_cross_sections();
+
+    for (auto& mat : model::materials) {
+      mat->mat_nuclide_index_.clear();
+      mat->init_nuclide_index();
+    }
+    // Now rebuild the global energy grids & interpolation tables
+    initialize_data();
+  }
+
+  return 0;
 }
 
 } // namespace openmc
