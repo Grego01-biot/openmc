@@ -119,6 +119,7 @@ int openmc_finalize()
   settings::run_CE = true;
   settings::run_mode = RunMode::UNSET;
   settings::source_latest = false;
+  settings::source_rejection_fraction = 0.05;
   settings::source_separate = false;
   settings::source_write = true;
   settings::ssw_cell_id = C_NONE;
@@ -171,8 +172,9 @@ int openmc_finalize()
 
   // Free all MPI types
 #ifdef OPENMC_MPI
-  if (mpi::source_site != MPI_DATATYPE_NULL)
+  if (mpi::source_site != MPI_DATATYPE_NULL) {
     MPI_Type_free(&mpi::source_site);
+  }
 #endif
 
   openmc_reset_random_ray();

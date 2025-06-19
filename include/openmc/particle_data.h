@@ -454,6 +454,9 @@ private:
 
   int cell_born_ {-1};
 
+  // Iterated Fission Probability
+  double lifetime_ {0.0}; //!< neutron lifetime [s]
+
   int n_collision_ {0};
 
   bool write_track_ {false};
@@ -560,13 +563,18 @@ public:
   double& time_last() { return time_last_; }
   const double& time_last() const { return time_last_; }
 
+  // Particle lifetime
+  double& lifetime() { return lifetime_; }
+  const double& lifetime() const { return lifetime_; }
+
   // What event took place, described in greater detail below
   TallyEvent& event() { return event_; }
   const TallyEvent& event() const { return event_; }
   bool& fission() { return fission_; }            // true if implicit fission
   int& event_nuclide() { return event_nuclide_; } // index of collision nuclide
   const int& event_nuclide() const { return event_nuclide_; }
-  int& event_mt() { return event_mt_; }           // MT number of collision
+  int& event_mt() { return event_mt_; } // MT number of collision
+  const int& event_mt() const { return event_mt_; }
   int& delayed_group() { return delayed_group_; } // delayed group
   const int& parent_nuclide() const { return parent_nuclide_; }
   int& parent_nuclide() { return parent_nuclide_; } // Parent nuclide

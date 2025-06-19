@@ -86,6 +86,9 @@ class Settings:
         .. versionadded:: 0.12
     generations_per_batch : int
         Number of generations per batch
+    ifp_n_generation : int
+        Number of generations to consider for the Iterated Fission Probability
+        method.
     max_lost_particles : int
         Maximum number of lost particles
 
@@ -219,6 +222,10 @@ class Settings:
         Number of random numbers allocated for each source particle history
     source : Iterable of openmc.SourceBase
         Distribution of source sites in space, angle, and energy
+    source_rejection_fraction : float
+        Minimum fraction of source sites that must be accepted when applying
+        rejection sampling based on constraints. If not specified, the default
+        value is 0.05.
     sourcepoint : dict
         Options for writing source points. Acceptable keys are:
 
@@ -354,6 +361,7 @@ class Settings:
 
         # Source subelement
         self._source = cv.CheckedList(SourceBase, 'source distributions')
+        self._source_rejection_fraction = None
 
         self._confidence_intervals = None
         self._electron_treatment = None
@@ -374,6 +382,9 @@ class Settings:
         self._trigger_batch_interval = None
 
         self._output = None
+
+        # Iterated Fission Probability
+        self._ifp_n_generation = None
 
         # Output options
         self._statepoint = {}
@@ -829,6 +840,17 @@ class Settings:
         self._verbosity = verbosity
 
     @property
+    def ifp_n_generation(self) -> int:
+        return self._ifp_n_generation
+
+    @ifp_n_generation.setter
+    def ifp_n_generation(self, ifp_n_generation: int):
+        if ifp_n_generation is not None:
+            cv.check_type("number of generations", ifp_n_generation, Integral)
+            cv.check_greater_than("number of generations", ifp_n_generation, 0)
+        self._ifp_n_generation = ifp_n_generation
+
+    @property
     def tabular_legendre(self) -> dict:
         return self._tabular_legendre
 
@@ -1236,6 +1258,17 @@ class Settings:
                     raise TypeError('Cross section types must be strings')
         self._random_sample_xs = value
 
+    @property
+    def source_rejection_fraction(self) -> float:
+        return self._source_rejection_fraction
+
+    @source_rejection_fraction.setter
+    def source_rejection_fraction(self, source_rejection_fraction: float):
+        cv.check_type('source_rejection_fraction', source_rejection_fraction, Real)
+        cv.check_greater_than('source_rejection_fraction', source_rejection_fraction, 0)
+        cv.check_less_than('source_rejection_fraction', source_rejection_fraction, 1)
+        self._source_rejection_fraction = source_rejection_fraction
+
     def _create_run_mode_subelement(self, root):
         elem = ET.SubElement(root, "run_mode")
         elem.text = self._run_mode.value
@@ -1484,6 +1517,11 @@ class Settings:
             element = ET.SubElement(root, "no_reduce")
             element.text = str(self._no_reduce).lower()
 
+    def _create_ifp_n_generation_subelement(self, root):
+        if self._ifp_n_generation is not None:
+            element = ET.SubElement(root, "ifp_n_generation")
+            element.text = str(self._ifp_n_generation)
+
     def _create_tabular_legendre_subelements(self, root):
         if self.tabular_legendre:
             element = ET.SubElement(root, "tabular_legendre")
@@ -1633,9 +1671,12 @@ class Settings:
             if mesh_memo is not None and wwg.mesh.id in mesh_memo:
                 continue
 
-            root.append(wwg.mesh.to_xml_element())
-            if mesh_memo is not None:
-                mesh_memo.add(wwg.mesh.id)
+            # See if a <mesh> element already exists -- if not, add it
+            path = f"./mesh[@id='{wwg.mesh.id}']"
+            if root.find(path) is None:
+                root.append(wwg.mesh.to_xml_element())
+                if mesh_memo is not None:
+                    mesh_memo.add(wwg.mesh.id)
 
     def _create_weight_windows_file_element(self, root):
         if self.weight_windows_file is not None:
@@ -1693,6 +1734,11 @@ class Settings:
          if self._EMC is not None:
              elem = ET.SubElement(root, "EMC")
              elem.text = str(self._EMC)
+
+    def _create_source_rejection_fraction_subelement(self, root):
+        if self._source_rejection_fraction is not None:
+            element = ET.SubElement(root, "source_rejection_fraction")
+            element.text = str(self._source_rejection_fraction)
 
     def _eigenvalue_from_xml_element(self, root):
         elem = root.find('eigenvalue')
@@ -1922,6 +1968,11 @@ class Settings:
         if text is not None:
             self.verbosity = int(text)
 
+    def _ifp_n_generation_from_xml_element(self, root):
+        text = get_text(root, 'ifp_n_generation')
+        if text is not None:
+            self.ifp_n_generation = int(text)
+
     def _tabular_legendre_from_xml_element(self, root):
         elem = root.find('tabular_legendre')
         if elem is not None:
@@ -2123,6 +2174,10 @@ class Settings:
                 for xs_type in xs_types:
                     xs_element = ET.SubElement(nuclide_element, "xs")
                     xs_element.text = xs_type
+    def _source_rejection_fraction_from_xml_element(self, root):
+        text = get_text(root, 'source_rejection_fraction')
+        if text is not None:
+            self.source_rejection_fraction = float(text)
 
     def to_xml_element(self, mesh_memo=None):
         """Create a 'settings' element to be written to an XML file.
@@ -2166,6 +2221,7 @@ class Settings:
         self._create_trigger_subelement(element)
         self._create_no_reduce_subelement(element)
         self._create_verbosity_subelement(element)
+        self._create_ifp_n_generation_subelement(element)
         self._create_tabular_legendre_subelements(element)
         self._create_temperature_subelements(element)
         self._create_trace_subelement(element)
@@ -2192,6 +2248,7 @@ class Settings:
         self._create_use_decay_photons_subelement(element)
         self._create_EMC_subelement(element)
         self._create_random_sample_xs_subelement(element)
+        self._create_source_rejection_fraction_subelement(element)
 
         # Clean the indentation in the file to be user-readable
         clean_indentation(element)
@@ -2277,6 +2334,7 @@ class Settings:
         settings._trigger_from_xml_element(elem)
         settings._no_reduce_from_xml_element(elem)
         settings._verbosity_from_xml_element(elem)
+        settings._ifp_n_generation_from_xml_element(elem)
         settings._tabular_legendre_from_xml_element(elem)
         settings._temperature_from_xml_element(elem)
         settings._trace_from_xml_element(elem)
@@ -2299,6 +2357,7 @@ class Settings:
         settings._max_tracks_from_xml_element(elem)
         settings._random_ray_from_xml_element(elem)
         settings._use_decay_photons_from_xml_element(elem)
+        settings._source_rejection_fraction_from_xml_element(elem)
 
         return settings
 

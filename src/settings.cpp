@@ -54,6 +54,7 @@ bool create_fission_neutrons {true};
 bool delayed_photon_scaling {true};
 bool entropy_on {false};
 bool event_based {false};
+bool ifp_on {false};
 bool legendre_to_tabular {true};
 bool material_cell_offsets {true};
 bool output_summary {true};
@@ -111,6 +112,8 @@ int max_particle_events {1000000};
 ElectronTreatment electron_treatment {ElectronTreatment::TTB};
 array<double, 4> energy_cutoff {0.0, 1000.0, 0.0, 0.0};
 array<double, 4> time_cutoff {INFTY, INFTY, INFTY, INFTY};
+int ifp_n_generation {-1};
+IFPParameter ifp_parameter {IFPParameter::None};
 int legendre_to_tabular_points {C_NONE};
 int max_order {0};
 int n_log_bins {8000};
@@ -126,6 +129,7 @@ RunMode run_mode {RunMode::UNSET};
 SolverType solver_type {SolverType::MONTE_CARLO};
 std::unordered_set<int> sourcepoint_batch;
 std::unordered_set<int> statepoint_batch;
+double source_rejection_fraction {0.05};
 std::unordered_set<int> source_write_surf_id;
 int64_t ssw_max_particles;
 int64_t ssw_max_files;
@@ -637,13 +641,6 @@ void read_settings_xml(pugi::xml_node root)
     model::external_sources.push_back(make_unique<FileSource>(path));
   }
 
-  // Build probability mass function for sampling external sources
-  vector<double> source_strengths;
-  for (auto& s : model::external_sources) {
-    source_strengths.push_back(s->strength());
-  }
-  model::external_sources_probability.assign(source_strengths);
-
   // If no source specified, default to isotropic point source at origin with
   // Watt spectrum. No default source is needed in random ray mode.
   if (model::external_sources.empty() &&
@@ -656,9 +653,22 @@ void read_settings_xml(pugi::xml_node root)
       UPtrDist {new Discrete(T, p, 1)}));
   }
 
+  // Build probability mass function for sampling external sources
+  vector<double> source_strengths;
+  for (auto& s : model::external_sources) {
+    source_strengths.push_back(s->strength());
+  }
+  model::external_sources_probability.assign(source_strengths);
+
   // Check if we want to write out source
   if (check_for_node(root, "write_initial_source")) {
     write_initial_source = get_node_value_bool(root, "write_initial_source");
+  }
+
+  // Get relative number of lost particles
+  if (check_for_node(root, "source_rejection_fraction")) {
+    source_rejection_fraction =
+      std::stod(get_node_value(root, "source_rejection_fraction"));
   }
 
   // Survival biasing
@@ -1077,6 +1087,20 @@ void read_settings_xml(pugi::xml_node root)
     auto range = get_node_array<double>(root, "temperature_range");
     temperature_range[0] = range.at(0);
     temperature_range[1] = range.at(1);
+  }
+
+  // Check for user value for the number of generation of the Iterated Fission
+  // Probability (IFP) method
+  if (check_for_node(root, "ifp_n_generation")) {
+    ifp_n_generation = std::stoi(get_node_value(root, "ifp_n_generation"));
+    if (ifp_n_generation <= 0) {
+      fatal_error("'ifp_n_generation' must be greater than 0.");
+    }
+    // Avoid tallying 0 if IFP logs are not complete when active cycles start
+    if (ifp_n_generation > n_inactive) {
+      fatal_error("'ifp_n_generation' must be lower than or equal to the "
+                  "number of inactive cycles.");
+    }
   }
 
   // Check for tabular_legendre options
