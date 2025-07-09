@@ -251,7 +251,7 @@ void accumulate_EMC_tallies();
 void setup_active_tallies();
 
 //! Compute the statistical uncertainty for all tallies using the first batch
-void compute_statistical_uncertainty();
+void compute_tallies_statistics();
 
 // Alias for the type returned by xt::adapt(...). N is the dimension of the
 // multidimensional array

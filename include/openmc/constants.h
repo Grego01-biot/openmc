@@ -286,7 +286,7 @@ enum class MgxsType {
 // ============================================================================
 // TALLY-RELATED CONSTANTS
 
-enum class TallyResult { VALUE, SUM, SUM_SQ, VAR, SIZE};
+enum class TallyResult { VALUE, SUM, SUM_SQ, MEAN, VAR, SIZE};
 
 enum class TallyType { VOLUME, MESH_SURFACE, SURFACE, PULSE_HEIGHT };
 

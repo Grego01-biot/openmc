@@ -42,6 +42,8 @@ class Settings:
     ----------
     batches : int
         Number of batches to simulate
+    sub_batches : int
+        Number of sub-batches to simulate for each batch
     confidence_intervals : bool
         If True, uncertainties on tally results will be reported as the
         half-width of the 95% two-sided confidence interval. If False,
@@ -347,6 +349,7 @@ class Settings:
     def __init__(self, **kwargs):
         self._run_mode = RunMode.EIGENVALUE
         self._batches = None
+        self._sub_batches = None
         self._generations_per_batch = None
         self._inactive = None
         self._max_lost_particles = None
@@ -460,6 +463,16 @@ class Settings:
         cv.check_type('batches', batches, Integral)
         cv.check_greater_than('batches', batches, 0)
         self._batches = batches
+    
+    @property
+    def sub_batches(self) -> int:
+        return self._sub_batches
+
+    @sub_batches.setter
+    def sub_batches(self, sub_batches: int):
+        cv.check_type('sub_batches', sub_batches, Integral)
+        cv.check_greater_than('sub_batches', sub_batches, 0)
+        self._sub_batches = sub_batches
 
     @property
     def generations_per_batch(self) -> int:
@@ -1277,6 +1290,11 @@ class Settings:
         if self._batches is not None:
             element = ET.SubElement(root, "batches")
             element.text = str(self._batches)
+        
+    def _create_sub_batches_subelement(self, root):
+        if self._sub_batches is not None:
+            element = ET.SubElement(root, "sub_batches")
+            element.text = str(self._sub_batches)
 
     def _create_generations_per_batch_subelement(self, root):
         if self._generations_per_batch is not None:
@@ -1766,6 +1784,11 @@ class Settings:
         text = get_text(root, 'batches')
         if text is not None:
             self.batches = int(text)
+    
+    def _sub_batches_from_xml_element(self, root):
+        text = get_text(root, 'sub_batches')
+        if text is not None:
+            self.sub_batches = int(text)
 
     def _inactive_from_xml_element(self, root):
         text = get_text(root, 'inactive')
@@ -2193,6 +2216,7 @@ class Settings:
         self._create_run_mode_subelement(element)
         self._create_particles_subelement(element)
         self._create_batches_subelement(element)
+        self._create_sub_batches_subelement(element)
         self._create_inactive_subelement(element)
         self._create_max_lost_particles_subelement(element)
         self._create_rel_max_lost_particles_subelement(element)
@@ -2305,6 +2329,7 @@ class Settings:
         settings._run_mode_from_xml_element(elem)
         settings._particles_from_xml_element(elem)
         settings._batches_from_xml_element(elem)
+        settings._sub_batches_from_xml_element(elem)
         settings._inactive_from_xml_element(elem)
         settings._max_lost_particles_from_xml_element(elem)
         settings._rel_max_lost_particles_from_xml_element(elem)

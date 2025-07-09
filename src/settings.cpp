@@ -212,17 +212,22 @@ void get_run_parameters(pugi::xml_node node_base)
   }
 
   // Get number of inactive batches
-  if (run_mode == RunMode::EIGENVALUE ||
-      solver_type == SolverType::RANDOM_RAY) {
+  if (settings::EMC) {
+    if (check_for_node(node_base, "generations_per_batch")) {
+        gen_per_batch =
+          std::stoi(get_node_value(node_base, "generations_per_batch"));
+    }
+  }
+    
+  if (run_mode == RunMode::EIGENVALUE || solver_type == SolverType::RANDOM_RAY) {
     if (check_for_node(node_base, "inactive")) {
       n_inactive = std::stoi(get_node_value(node_base, "inactive"));
     }
     if (check_for_node(node_base, "generations_per_batch")) {
-      gen_per_batch =
-        std::stoi(get_node_value(node_base, "generations_per_batch"));
+        gen_per_batch =
+          std::stoi(get_node_value(node_base, "generations_per_batch"));
     }
   
-
     // Preallocate space for keff and entropy by generation
     int m = settings::n_max_batches * settings::gen_per_batch;
     simulation::k_generation.reserve(m);
@@ -556,6 +561,7 @@ void read_settings_xml(pugi::xml_node root)
     } else if (rel_max_lost_particles <= 0.0 || rel_max_lost_particles >= 1.0) {
       fatal_error("Relative max lost particles must be between zero and one.");
     } else if (EMC == true){
+      fmt::print("gen_per_batch={}", gen_per_batch);
       if (gen_per_batch == 1){
         fatal_error("EMC mode needs more than one generation per batch for computing the statistical uncertainty");
       }

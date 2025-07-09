@@ -241,14 +241,11 @@ int openmc_next_batch(int* status)
   }
 
   initialize_batch();
-  //fmt::print("Simulating batch {:<4} (active)\n", simulation::current_batch);
-
   // =======================================================================
   // LOOP OVER GENERATIONS
   for (current_gen = 1; current_gen <= settings::gen_per_batch; ++current_gen) {
 
     initialize_generation();
-    //fmt::print("Simulating generation {:<4} \n", current_gen);
 
     // Start timer for transport
     simulation::time_transport.start();
@@ -262,11 +259,9 @@ int openmc_next_batch(int* status)
 
     // Accumulate time for transport
     simulation::time_transport.stop();
-    //fmt::print("Accumulate time for transport \n", current_gen);
+
     finalize_generation();
-    //fmt::print("[DEBUG] Fission bank size = {}\n", simulation::fission_bank.size());
   }
-  //fmt::print("Finalizing batch {:<4} (active)\n", simulation::current_batch);
 
   finalize_batch();
 
@@ -403,9 +398,12 @@ void initialize_batch()
 void finalize_batch()
 {
   // Reduce tallies onto master process and accumulate
-  simulation::time_tallies.start();
-  accumulate_tallies();
-  simulation::time_tallies.stop();
+  
+  if (!settings::EMC) {
+    simulation::time_tallies.start();
+    accumulate_tallies();
+    simulation::time_tallies.stop();
+  } 
 
   // update weight windows if needed
   for (const auto& wwg : variance_reduction::weight_windows_generators) {
@@ -564,6 +562,16 @@ void finalize_generation()
     if (mpi::master && settings::verbosity >= 7) {
       print_generation();
     }
+  }
+
+  if (settings::EMC && settings::run_mode == RunMode::FIXED_SOURCE) {
+    simulation::time_tallies.start();
+    accumulate_tallies();
+    if (simulation::current_gen == settings::gen_per_batch) { 
+      fmt::print("We accumulate tallies \n");
+      compute_tallies_statistics();
+    }
+    simulation::time_tallies.stop();
   }
 }
 

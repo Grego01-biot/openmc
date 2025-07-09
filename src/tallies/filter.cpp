@@ -11,6 +11,7 @@
 #include "openmc/constants.h" // for MAX_LINE_LEN;
 #include "openmc/error.h"
 #include "openmc/tallies/filter_azimuthal.h"
+#include "openmc/tallies/filter_batch.h"
 #include "openmc/tallies/filter_cell.h"
 #include "openmc/tallies/filter_cell_instance.h"
 #include "openmc/tallies/filter_cellborn.h"
@@ -104,6 +105,8 @@ Filter* Filter::create(const std::string& type, int32_t id)
 {
   if (type == "azimuthal") {
     return Filter::create<AzimuthalFilter>(id);
+  } else if (type =="batch") {
+    return Filter::create<BatchFilter>(id);
   } else if (type == "cell") {
     return Filter::create<CellFilter>(id);
   } else if (type == "cellborn") {

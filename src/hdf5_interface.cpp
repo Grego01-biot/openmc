@@ -542,9 +542,9 @@ void read_tally_results(
 {
   // Create dataspace for hyperslab in memory
   constexpr int ndim = 3;
-  hsize_t dims[ndim] {n_filter, n_score, 3};
+  hsize_t dims[ndim] {n_filter, n_score, 5};
   hsize_t start[ndim] {0, 0, 1};
-  hsize_t count[ndim] {n_filter, n_score, 2};
+  hsize_t count[ndim] {n_filter, n_score, 4};
   hid_t memspace = H5Screate_simple(ndim, dims, nullptr);
   H5Sselect_hyperslab(memspace, H5S_SELECT_SET, start, nullptr, count, nullptr);
 
@@ -692,10 +692,10 @@ void write_tally_results(
 {
   // Set dimensions of sum/sum_sq hyperslab to store
   constexpr int ndim = 3;
-  hsize_t count[ndim] {n_filter, n_score, 2};
+  hsize_t count[ndim] {n_filter, n_score, 4};
 
   // Set dimensions of results array
-  hsize_t dims[ndim] {n_filter, n_score, 3};
+  hsize_t dims[ndim] {n_filter, n_score, 5};
   hsize_t start[ndim] {0, 0, 1};
   hid_t memspace = H5Screate_simple(ndim, dims, nullptr);
   H5Sselect_hyperslab(memspace, H5S_SELECT_SET, start, nullptr, count, nullptr);

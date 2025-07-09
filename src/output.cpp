@@ -515,7 +515,7 @@ std::pair<double, double> EMC_uncertainty(const double* x, int n)
 {
   double mean = x[static_cast<int>(TallyResult::SUM)] / n;
   double var_tot = 
-    n > 1 ? (1/n-1) * (x[static_cast<int>(TallyResult::SUM)] - mean )
+    n > 1 ? (1/n-1) * (x[static_cast<int>(TallyResult::SUM_SQ)] - mean )
           : 0.0;
   double var_stat = x[static_cast<int>(TallyResult::VAR)];
   double var_nuclear_data = var_tot - var_stat;
@@ -780,12 +780,15 @@ void write_tallies()
           double mean, stdev;
           if (settings::EMC)
           {
-            std::tie(mean, stdev) =
-            EMC_uncertainty(&tally.results_(filter_index, score_index, 0),
-              tally.n_realizations_);
-            fmt::print(tallies_out, "{0:{1}}{2:<36} {3:.6} +/- {4:.6}\n", "",
-            indent + 1, score_name, mean, stdev);
-          score_index += 1;
+            double mean = tally.results_(filter_index, score_index,
+                                         TallyResult::SUM) / settings::gen_per_batch;
+            double var = tally.results_(filter_index, score_index,
+                                        TallyResult::VAR);
+            double stdev  = std::sqrt(var);
+            //double margin = t_value * stdev;
+            fmt::print(tallies_out, "{0:{1}}{2:<36} {3:.6} +/- {4:.6}\n",
+                     "", indent + 1, score_name, mean, stdev);           
+            score_index += 1;
           } else{
           std::tie(mean, stdev) =
             mean_stdev(&tally.results_(filter_index, score_index, 0),

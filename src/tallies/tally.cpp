@@ -798,7 +798,7 @@ void Tally::init_results()
   int n_scores = scores_.size() * nuclides_.size();
   if (settings::EMC)
   {
-    results_ = xt::empty<double>({n_filter_bins_, n_scores, 4});
+    results_ = xt::empty<double>({n_filter_bins_, n_scores, 5});
   } else{
     results_ = xt::empty<double>({n_filter_bins_, n_scores, 3});
   }
@@ -1014,8 +1014,8 @@ void reduce_tally_results()
         static_cast<int>(TallyResult::VALUE));
 
       // Make copy of tally values in contiguous array
-      xt::xtensor<double, 2> values = values_view;
-      xt::xtensor<double, 2> values_reduced = xt::empty_like(values);
+      xt::xtensor<double, 4> values = values_view;
+      xt::xtensor<double, 4> values_reduced = xt::empty_like(values);
 
       // Reduce contiguous set of tally results
       MPI_Reduce(values.data(), values_reduced.data(), values.size(),
@@ -1204,42 +1204,39 @@ void setup_active_tallies()
   }
 }
 
-void compute_statistical_uncertainty()
+void compute_tallies_statistics()
 {
-  int n = settings::gen_per_batch * simulation::n_realizations +
-        simulation::current_gen;
+  int n = settings::gen_per_batch;
+  int b = simulation::current_batch - 1;
+  fmt::print("={}\n",b);
+
   // Compute statistical uncertainty for global tallies
-  auto& gt = simulation::global_tallies;
+  /*auto& gt = simulation::global_tallies;
   for (int i = 0; i < N_GLOBAL_TALLIES; ++i) {
-    double sum = gt(i, TallyResult::SUM);
-    double sum_sq = gt(i, TallyResult::SUM_SQ);
+    double sum    = gt(b, i, TallyResult::SUM);
+    double sum_sq  = gt(b, i, TallyResult::SUM_SQ);
     double mean = sum / n;
     double variance = sum_sq / n - mean * mean;
-    gt(i, TallyResult::VAR) += variance;
-  }
+    gt(b, i, TallyResult::MEAN) = mean;
+    gt(b, i, TallyResult::VAR) = variance;
+  }*/
 
   // Compute statistical uncertainty for each tally
   for (int i_tally : model::active_tallies) {
     auto& tally {model::tallies[i_tally]};
-    for (int i = 0; i < tally->results_.shape()[1]; ++i) {
-      double sum = tally->results_(0, i, TallyResult::SUM);
-      double sum_sq = tally->results_(0, i, TallyResult::SUM_SQ);
+    for (int j = 0; j < tally->results_.shape()[1]; ++j) {
+      double sum = tally->results_(b, j, TallyResult::SUM);
+      double sum_sq = tally->results_(b, j, TallyResult::SUM_SQ);
       double mean = sum / n;
       double variance = sum_sq / n - mean * mean;
-      tally->results_(0, i, TallyResult::VAR) += variance;
+      fmt::print("mean value={:.10f}\n",mean);
+      fmt::print("variance accumulated={:.10f}\n", variance);
+      fmt::print("indices printing b ={}", b);
+      fmt::print("indices printing j ={}", j);
+      tally->results_(b, j, TallyResult::MEAN) = mean;
+      tally->results_(b, j, TallyResult::VAR) = variance;
     }
   }
-  /*
-  for (int i = 0; i < results_.shape()[0]; ++i) {
-    for (int j = 0; j < results_.shape()[1]; ++j) {
-      double sum = results_(i, j, TallyResult::SUM);
-      double sum_sq = results_(i, j, TallyResult::SUM_SQ);
-      double mean = sum / n;
-      double variance = sum_sq / n - mean * mean;
-      results_(i, j, TallyResult::VAR) += variance;
-    }
-  }
-  */
 }
 
 void free_memory_tally()

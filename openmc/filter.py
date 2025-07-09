@@ -26,7 +26,7 @@ _FILTER_TYPES = (
     'energyfunction', 'cellfrom', 'materialfrom', 'legendre', 'spatiallegendre',
     'sphericalharmonics', 'zernike', 'zernikeradial', 'particle', 'cellinstance',
     'collision', 'time', 'parentnuclide', 'weight', 'meshborn', 'meshsurface',
-    'meshmaterial',
+    'meshmaterial', 'batch'
 )
 
 _CURRENT_NAMES = (
@@ -2531,3 +2531,52 @@ class WeightFilter(RealFilter):
     values : numpy.ndarray
         Array of weight boundaries
     """
+
+class BatchFilter(RealFilter):
+    """Bins tally events based on the batch number.
+
+    Parameters
+    ----------
+    Values : Iterable of int
+        A list or iterable of the batches, as int values.
+    filter_id : int
+        Unique identifier for the filter
+
+    Attributes
+    ----------
+    id : int
+        Unique identifier for the filter
+    bins : numpy.ndarray
+        An array of integer values representing the batches by which to filter
+    num_bins : int
+        The number of filter bins
+    values : numpy.ndarray
+        Array of batch values
+    """
+   
+    def __init__(self, batches=None, filter_id=None, inactive=None, total_batches=None):
+        # Determine the list of batches
+        
+        # Get settings values - either from parameters or import
+        if inactive is None or total_batches is None:
+            raise ValueError('No inactive or active batches were given')
+        else:
+            n_inact = inactive
+            n_tot = total_batches
+
+        if batches is None:
+            # assume settings.n_batches includes inactive + active
+            batches = list(range(n_inact+1, n_tot+1))
+        else:
+            batches = list(batches)
+
+        bad = [b for b in batches
+                if np.any(b <= n_inact) or np.any(b > n_tot)]
+        if bad:
+            raise ValueError(
+                f"BatchFilter: requested invalid/inactive batches {bad} "
+                f"(inactive <= {n_inact}, total = {n_tot})"
+            )
+
+        # 4) Delegate to the real Filter constructor (which will store them as discrete bins)
+        super().__init__(batches, filter_id)
