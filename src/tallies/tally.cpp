@@ -822,7 +822,6 @@ void Tally::init_triggers(pugi::xml_node node)
 
 void Tally::init_results()
 {
-  // Modifications to the results array size to accumulate sum_third and sum_fourth
   int n_scores = scores_.size() * nuclides_.size();
   if (higher_moments_) {
     results_ = tensor::Tensor<double>({static_cast<size_t>(n_filter_bins_),
@@ -899,48 +898,6 @@ void Tally::accumulate()
     }
   }
 }
-
-void Tally::accumulate_vov()
-{
-  // Increment number of realizations
-  n_realizations_ += settings::reduce_tallies ? 1 : mpi::n_procs;
-
-  if (mpi::master || !settings::reduce_tallies) {
-    // Calculate total source strength for normalization
-    double total_source = 0.0;
-    if (settings::run_mode == RunMode::FIXED_SOURCE) {
-      for (const auto& s : model::external_sources) {
-        total_source += s->strength();
-      }
-    } else {
-      total_source = 1.0;
-    }
-
-    // Account for number of source particles in normalization
-    double norm =
-      total_source / (settings::n_particles * settings::gen_per_batch);
-
-    if (settings::solver_type == SolverType::RANDOM_RAY) {
-      norm = 1.0;
-    }
-
-// Accumulate each result
-#pragma omp parallel for
-// filter bins (specific cell, energy bins)
-    for (int i = 0; i < results_.shape()[0]; ++i) {
-      // score bins (flux, total reaction rate, fission reaction rate, etc.)
-      for (int j = 0; j < results_.shape()[1]; ++j) {
-        double val = results_(i, j, TallyResult::VALUE) * norm;
-        results_(i, j, TallyResult::VALUE) = 0.0;
-        results_(i, j, TallyResult::SUM) += val;
-        results_(i, j, TallyResult::SUM_SQ) += val * val;
-        results_(i, j, TallyResult::SUM_THIRD) += val * val * val;
-        results_(i, j, TallyResult::SUM_FOURTH) += val * val * val * val;
-      }
-    }
-  }
-}
-
 
 int Tally::score_index(const std::string& score) const
 {
@@ -1076,9 +1033,9 @@ void reduce_tally_results()
 
       tensor::Tensor<double> values_reduced(values.shape());
 
-      if (openmc::model::vov_){
-        xt::xtensor<double, 4> values = values_view;
-        xt::xtensor<double, 4> values_reduced = xt::empty_like(values);
+      // Reduce contiguous set of tally results
+      MPI_Reduce(values.data(), values_reduced.data(), values.size(),
+        MPI_DOUBLE, MPI_SUM, 0, mpi::intracomm);
 
       // Transfer values on master and reset on other ranks
       if (mpi::master) {
@@ -1164,11 +1121,7 @@ void accumulate_tallies()
   // Accumulate results for each tally
   for (int i_tally : model::active_tallies) {
     auto& tally {model::tallies[i_tally]};
-    if (openmc::model::vov_){
-      tally->accumulate_vov();
-    } else {
-      tally->accumulate();
-    }
+    tally->accumulate();
   }
 }
 
