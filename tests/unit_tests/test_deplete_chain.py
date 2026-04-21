@@ -54,11 +54,11 @@ def simple_chain():
 
 
 @pytest.fixture(scope='module')
-def endf_chain():
-    endf_data = Path(os.environ['OPENMC_ENDF_DATA'])
-    decay_data = (endf_data / 'decay').glob('*.endf')
-    fpy_data = (endf_data / 'nfy').glob('*.endf')
-    neutron_data = (endf_data / 'neutrons').glob('*.endf')
+def endf_chain(endf_data):
+    endf_dir = Path(endf_data)
+    decay_data = (endf_dir / 'decay').glob('*.endf')
+    fpy_data = (endf_dir / 'nfy').glob('*.endf')
+    neutron_data = (endf_dir / 'neutrons').glob('*.endf')
     return Chain.from_endf(decay_data, fpy_data, neutron_data)
 
 
@@ -246,6 +246,29 @@ def test_form_matrix(simple_chain):
         assert new_mat[r, c] == mat[r, c]
 
 
+def test_decay_matrix(simple_chain):
+    """Test that decay_matrix contains only radioactive decay terms."""
+    # Nuclide order: H1(0), A(1), B(2), C(3)
+    decay_A = log(2) / 2.36520E+04
+    decay_B = log(2) / 3.29040E+04
+
+    expected = np.zeros((4, 4))
+    expected[1, 1] = -decay_A           # Loss: A decays
+    expected[2, 1] = decay_A * 0.6      # A -> B (branching ratio 0.6)
+    expected[3, 1] = decay_A * 0.4      # A -> C (branching ratio 0.4)
+    expected[1, 2] = decay_B            # B -> A (branching ratio 1.0)
+    expected[2, 2] = -decay_B           # Loss: B decays
+
+    assert np.allclose(expected, simple_chain.decay_matrix.toarray())
+
+
+def test_decay_matrix_cached(simple_chain):
+    """Test that decay_matrix is lazily computed and returns the same object."""
+    m1 = simple_chain.decay_matrix
+    m2 = simple_chain.decay_matrix
+    assert m1 is m2
+
+
 def test_getitem():
     """Test nuc_by_ind converter function."""
     chain = Chain()
@@ -310,8 +333,7 @@ def test_capture_branch_infer_ground():
     # Create nuclide to be added into the chain
     xe136m = nuclide.Nuclide("Xe136_m1")
 
-    chain.nuclides.append(xe136m)
-    chain.nuclide_dict[xe136m.name] = len(chain.nuclides) - 1
+    chain.add_nuclide(xe136m)
 
     chain.set_branch_ratios(infer_br, "(n,gamma)")
 
@@ -327,8 +349,7 @@ def test_capture_branch_no_rxn():
 
     u5m = nuclide.Nuclide("U235_m1")
 
-    chain.nuclides.append(u5m)
-    chain.nuclide_dict[u5m.name] = len(chain.nuclides) - 1
+    chain.add_nuclide(u5m)
 
     with pytest.raises(AttributeError, match="U234"):
         chain.set_branch_ratios(u4br)

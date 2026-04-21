@@ -35,6 +35,13 @@ you wish) with OpenMC installed.
     conda create --name openmc-env openmc
     conda activate openmc-env
 
+If you are installing on macOS with an Apple silicon ARM-based processor, you
+will also need to specify the `--platform` option:
+
+.. code-block:: sh
+
+    conda create --name openmc-env --platform osx-64 openmc
+
 You are now in a conda environment called `openmc-env` that has OpenMC
 installed.
 
@@ -151,6 +158,75 @@ feature can be used to access the installed packages.
 .. _Spack: https://spack.readthedocs.io/en/latest/
 .. _setup guide: https://spack.readthedocs.io/en/latest/getting_started.html
 
+.. _install_aur:
+
+------------------------------------
+Installing on Arch Linux via the AUR
+------------------------------------
+
+On Arch Linux and Arch-based distributions, OpenMC can be installed from the
+`Arch User Repository (AUR) <https://aur.archlinux.org/>`_. An AUR package named
+``openmc-git`` is available, which builds OpenMC directly from the latest
+development sources.
+
+This package provides a full-featured OpenMC stack, including:
+
+* MPI and DAGMC-enabled OpenMC build
+* User-selected nuclear data libraries
+* The `CAD_to_OpenMC <https://github.com/united-neux/CAD_to_OpenMC>`_ meshing tool
+* All required dependencies for the above components
+
+To install the package, you will need an AUR helper such as `yay`_ or `paru`_.
+For example, using ``yay``::
+
+    yay -S openmc-git
+
+
+Alternatively, you can manually clone and build the package::
+
+    git clone https://aur.archlinux.org/openmc-git.git
+    cd openmc-git
+    makepkg -si
+
+Note, ``makepkg`` uses ``pacman`` to resolve dependencies. Therefore, AUR-based
+dependencies need to be installed separately with ``yay`` or ``paru`` before
+running ``makepkg``. The PKGBUILD will automatically handle all required
+dependencies and build OpenMC with MPI and DAGMC support enabled.
+
+.. tip::
+
+    If there are failing checks during the build process, you can bypass them
+    with the ``--nocheck`` flag::
+
+        yay -S openmc-git --mflags "--nocheck"
+
+    Or::
+
+        git clone https://aur.archlinux.org/openmc-git.git
+        cd openmc-git
+        makepkg -si --nocheck
+
+.. note::
+
+    The ``openmc-git`` package tracks the latest development version from the
+    upstream repository. As such, it may include new features and bug fixes, but
+    could also introduce instability compared to official releases.
+
+.. tip::
+
+    OpenMC is installed under ``/opt``. If you are installing and using it in
+    the same terminal session, you may need to reload your environment
+    variables::
+
+        source /etc/profile
+
+    Alternatively, start a new shell session.
+
+Once installed, the ``openmc`` executable, nuclear data libraries, and
+associated tools will be available in your system :envvar:`PATH`.
+
+.. _yay: https://github.com/Jguer/yay
+.. _paru: https://github.com/Morganamilo/paru
 
 .. _install_source:
 
@@ -221,7 +297,7 @@ Prerequisites
       OpenMC's built-in plotting capabilities use the libpng library to produce
       compressed PNG files. In the absence of this library, OpenMC will fallback
       to writing PPM files, which are uncompressed and only supported by select
-      image viewers. libpng can be installed on Ddebian derivates with::
+      image viewers. libpng can be installed on Debian derivates with::
 
           sudo apt install libpng-dev
 
@@ -368,10 +444,6 @@ OPENMC_USE_DAGMC
   should also be defined as `DAGMC_ROOT` in the CMake configuration command.
   (Default: off)
 
-OPENMC_USE_MCPL
-  Turns on support for reading MCPL_ source files and writing MCPL source points
-  and surface sources. (Default: off)
-
 OPENMC_USE_LIBMESH
   Enables the use of unstructured mesh tallies with libMesh_. (Default: off)
 
@@ -379,6 +451,25 @@ OPENMC_USE_MPI
   Turns on compiling with MPI (Default: off). For further information on MPI
   options, please see the `FindMPI.cmake documentation
   <https://cmake.org/cmake/help/latest/module/FindMPI.html>`_.
+
+.. _cmake_strict_fp:
+
+OPENMC_ENABLE_STRICT_FP
+  Disables compiler optimizations that change floating-point results relative to
+  unoptimized builds, improving cross-platform and cross-optimization-level
+  reproducibility. This disables FMA contraction (``-ffp-contract=off``) and
+  compiler builtin replacements of math functions like ``pow``, ``exp``, ``log``
+  (``-fno-builtin``). It also keeps C/C++ assertions active by removing the
+  ``-DNDEBUG`` flag from ``RelWithDebInfo`` builds. Without this flag, these
+  optimizations can produce bit-level differences across platforms, compilers,
+  and optimization levels. This option should be used when running the test
+  suite. By default (off), the compiler is free to use all optimizations for
+  best performance. (Default: off)
+
+OPENMC_FORCE_VENDORED_LIBS
+  Forces OpenMC to use the submodules located in the vendor directory, as
+  opposed to searching the system for already installed versions of those
+  modules.
 
 To set any of these options (e.g., turning on profiling), the following form
 should be used:
@@ -407,7 +498,10 @@ Release
 
 RelWithDebInfo
   (Default if no type is specified.) Enable optimization and debug. On most
-  platforms/compilers, this is equivalent to `-O2 -g`.
+  platforms/compilers, this is equivalent to `-O2 -g`. When
+  :ref:`OPENMC_ENABLE_STRICT_FP <cmake_strict_fp>` is enabled, OpenMC removes the
+  ``-DNDEBUG`` flag that CMake normally adds for this build type, so that
+  C/C++ assertions remain active.
 
 Example of configuring for Debug mode:
 
@@ -515,10 +609,13 @@ to install the Python package in :ref:`"editable" mode <devguide_editable>`.
 Prerequisites
 -------------
 
-The Python API works with Python 3.8+. In addition to Python itself, the API
-relies on a number of third-party packages. All prerequisites can be installed
-using Conda_ (recommended), pip_, or through the package manager in most Linux
-distributions.
+In addition to Python itself, the OpenMC Python API relies on a number of
+third-party packages. All prerequisites can be installed using Conda_
+(recommended), pip_, or through the package manager in most Linux distributions.
+The current required Python version and up-to-date list of package dependencies
+can be found in the `pyproject.toml <https://github.com/openmc-dev/openmc/blob/develop/pyproject.toml>`_
+file in the root directory of the OpenMC repository. An overview of these
+dependencies is provided below.
 
 .. admonition:: Required
    :class: error

@@ -4,8 +4,7 @@
 #include <stdexcept>
 #include <string>
 
-#include "xtensor/xarray.hpp"
-#include "xtensor/xtensor.hpp"
+#include "openmc/tensor.h"
 #include <fmt/core.h>
 
 #include "hdf5.h"
@@ -93,7 +92,7 @@ void get_shape_attr(hid_t obj_id, const char* name, hsize_t* dims)
   H5Aclose(attr);
 }
 
-hid_t create_group(hid_t parent_id, char const* name)
+hid_t create_group(hid_t parent_id, const char* name)
 {
   hid_t out = H5Gcreate(parent_id, name, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
   if (out < 0) {
@@ -226,8 +225,7 @@ void get_name(hid_t obj_id, std::string& name)
 {
   size_t size = 1 + H5Iget_name(obj_id, nullptr, 0);
   name.resize(size);
-  // TODO: switch to name.data() when using C++17
-  H5Iget_name(obj_id, &name[0], size);
+  H5Iget_name(obj_id, name.data(), size);
 }
 
 int get_num_datasets(hid_t group_id)
@@ -468,22 +466,19 @@ void read_dataset_lowlevel(hid_t obj_id, const char* name, hid_t mem_type_id,
 }
 
 template<>
-void read_dataset(hid_t dset, xt::xarray<std::complex<double>>& arr, bool indep)
+void read_dataset(
+  hid_t dset, tensor::Tensor<std::complex<double>>& tensor, bool indep)
 {
   // Get shape of dataset
   vector<hsize_t> shape = object_shape(dset);
 
-  // Allocate new array to read data into
-  std::size_t size = 1;
-  for (const auto x : shape)
-    size *= x;
-  vector<std::complex<double>> buffer(size);
+  // Resize tensor and read data directly
+  vector<size_t> tshape(shape.begin(), shape.end());
+  tensor.resize(tshape);
 
-  // Read data from attribute
-  read_complex(dset, nullptr, buffer.data(), indep);
-
-  // Adapt into xarray
-  arr = xt::adapt(buffer, shape);
+  // Read data from dataset
+  read_complex(dset, nullptr,
+    reinterpret_cast<std::complex<double>*>(tensor.data()), indep);
 }
 
 void read_double(hid_t obj_id, const char* name, double* buffer, bool indep)
@@ -538,18 +533,16 @@ void read_complex(
   H5Tclose(complex_id);
 }
 
-void read_tally_results(
-  hid_t group_id, hsize_t n_filter, hsize_t n_score, double* results)
+void read_tally_results(hid_t group_id, hsize_t n_filter, hsize_t n_score,
+  hsize_t n_results, double* results)
 {
   // Create dataspace for hyperslab in memory
   constexpr int ndim = 3;
-  if (openmc::model::vov_)
-  {
-    hsize_t dims[ndim] {n_filter, n_score, 5};
-    hsize_t start[ndim] {0, 0, 1};
-    hsize_t count[ndim] {n_filter, n_score, 4};
-    hid_t memspace = H5Screate_simple(ndim, dims, nullptr);
-    H5Sselect_hyperslab(memspace, H5S_SELECT_SET, start, nullptr, count, nullptr);
+  hsize_t dims[ndim] {n_filter, n_score, n_results};
+  hsize_t start[ndim] {0, 0, 1};
+  hsize_t count[ndim] {n_filter, n_score, n_results - 1};
+  hid_t memspace = H5Screate_simple(ndim, dims, nullptr);
+  H5Sselect_hyperslab(memspace, H5S_SELECT_SET, start, nullptr, count, nullptr);
 
     // Read the dataset
     read_dataset_lowlevel(
@@ -706,21 +699,18 @@ void write_string(
     group_id, 0, nullptr, buffer.length(), name, buffer.c_str(), indep);
 }
 
-void write_tally_results(
-  hid_t group_id, hsize_t n_filter, hsize_t n_score, const double* results)
+void write_tally_results(hid_t group_id, hsize_t n_filter, hsize_t n_score,
+  hsize_t n_results, const double* results)
 {
   // Set dimensions of sum/sum_sq hyperslab to store
-  if (openmc::model::vov_)
-  {
-    constexpr int ndim = 3;
-    hsize_t count[ndim] {n_filter, n_score, 4};
-    // Set dimensions of results array
-    hsize_t dims[ndim] {n_filter, n_score, 5};
-    
+  constexpr int ndim = 3;
+  hsize_t count[ndim] {n_filter, n_score, n_results - 1};
 
-    hsize_t start[ndim] {0, 0, 1};
-    hid_t memspace = H5Screate_simple(ndim, dims, nullptr);
-    H5Sselect_hyperslab(memspace, H5S_SELECT_SET, start, nullptr, count, nullptr);
+  // Set dimensions of results array
+  hsize_t dims[ndim] {n_filter, n_score, n_results};
+  hsize_t start[ndim] {0, 0, 1};
+  hid_t memspace = H5Screate_simple(ndim, dims, nullptr);
+  H5Sselect_hyperslab(memspace, H5S_SELECT_SET, start, nullptr, count, nullptr);
 
     // Create and write dataset
     write_dataset_lowlevel(group_id, ndim, count, "results", H5T_NATIVE_DOUBLE,
