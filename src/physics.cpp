@@ -1239,10 +1239,16 @@ void sample_secondary_photons(Particle& p, int i_nuclide)
     }
 
     // Tag secondary particle with parent nuclide
-    if (created_photon && settings::use_decay_photons) {
-      p.local_secondary_bank().back().parent_nuclide =
-        rx->products_[i_product].parent_nuclide_;
-    }
+    if (created_photon) {
+      if (settings::use_decay_photons) {
+        // D1S: tag with the radionuclide product (chain nuclide index)
+        p.local_secondary_bank().back().parent_nuclide =
+          rx->products_[i_product].parent_nuclide_;
+      } else {
+        // Prompt photons: tag with the emitting transport nuclide
+        p.local_secondary_bank().back().parent_nuclide = i_nuclide;
+      }
+    } 
   }
 }
 

@@ -109,6 +109,7 @@ bool Particle::create_secondary(
   bank.wgt_born = wgt_born();
   bank.wgt_ww_born = wgt_ww_born();
   bank.n_split = n_split();
+  bank.parent_nuclide = parent_nuclide(); // inherit tag through cascade
 
   local_secondary_bank().emplace_back(bank);
   return true;

@@ -9,6 +9,7 @@
 #include "openmc/search.h"
 #include "openmc/settings.h"
 #include "openmc/xml_interface.h"
+#include "openmc/nuclide.h"
 
 namespace openmc {
 
@@ -27,9 +28,16 @@ void ParentNuclideFilter::from_xml(pugi::xml_node node)
     if (it != data::chain_nuclide_map.end()) {
       bins.push_back(it->second);
     } else {
-      // The default value of parent_nuclide is -1, so to prevent a score to
-      // this bin assign the value -2.
-      bins.push_back(-2);
+      // Fall back to transport nuclide indices (prompt-photon tagging,
+      // where no depletion chain is loaded)
+      auto it2 = data::nuclide_map.find(nuclide);
+      if (it2 != data::nuclide_map.end()) {
+        bins.push_back(it2->second);
+      } else {
+        // The default value of parent_nuclide is -1, so to prevent a score
+        // to this bin assign the value -2.
+        bins.push_back(-2);
+      }
     }
   }
   this->set_bins(bins);
